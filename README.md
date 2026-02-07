@@ -21,6 +21,54 @@ bun run tui
 bun run cli help
 ```
 
+## Build Single-File Executable
+
+```bash
+# Build for current platform (stable default)
+bun run build:exe
+
+# Optional optimized release build (minify + linked sourcemap)
+bun run build:exe:release
+
+# Cross-compile examples
+bun run build:exe:linux-x64
+bun run build:exe:linux-arm64
+bun run build:exe:windows-x64
+
+# macOS targets (includes codesign + verify)
+bun run build:exe:darwin-arm64
+bun run build:exe:darwin-x64
+```
+
+Note for OpenTUI native targets: cross-compiling may require the matching `@opentui/core-<os>-<arch>` package to be present. In practice, building on the target platform/architecture is the most reliable path.
+
+Output files are written under `dist/` and can be run directly, for example:
+
+```bash
+./dist/padel-tui availability search berlin --date 2026-02-11
+```
+
+Custom target/outfile:
+
+```bash
+bun run scripts/build-executable.ts --target=bun-linux-x64-baseline --outfile=dist/padel-tui-custom
+```
+
+macOS codesigning options (used by macOS build scripts):
+
+```bash
+# Use your Developer ID identity (recommended for distribution)
+PADEL_CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" bun run build:exe:darwin-arm64
+
+# Or pass identity directly
+bun run scripts/build-executable.ts --target=bun-darwin-arm64 --outfile=dist/padel-tui-darwin-arm64 --codesign --sign-identity="Developer ID Application: Your Name (TEAMID)"
+```
+
+By default, if no identity is provided, the build script falls back to ad-hoc signing (`-`).
+Entitlements file used for macOS signing: `scripts/macos-entitlements.plist`.
+
+Note: compiled binaries disable runtime `bunfig.toml` autoload so they run without requiring project-local preload hooks.
+
 ## CLI Commands
 
 ```bash
@@ -92,7 +140,8 @@ In search mode:
 
 - Run search with `Enter` (or `Ctrl+S`)
 - Move selection with `Up/Down` (or `j/k`)
-- Press `B` to book selected slot
+- Press `B` once to arm booking confirmation
+- Press `B` again to confirm booking charge (`Esc` cancels confirmation)
 
 The TUI shows booking progress and prints success with `payment_id` when completed.
 

@@ -1,12 +1,17 @@
 import type { PlaytomicApi } from "../adapters/playtomic/playtomic-api";
 import { PlaytomicApiError } from "../adapters/playtomic/errors";
-import { SessionStore } from "../adapters/storage/session-store";
 import type { Credentials, Session } from "../domain/types";
+
+export interface SessionStoreLike {
+  load(): Promise<Session | null>;
+  save(session: Session): Promise<void>;
+  clear(): Promise<void>;
+}
 
 export class AuthService {
   constructor(
     private readonly api: PlaytomicApi,
-    private readonly sessionStore: SessionStore,
+    private readonly sessionStore: SessionStoreLike,
   ) {}
 
   async login(credentials: Credentials): Promise<Session> {

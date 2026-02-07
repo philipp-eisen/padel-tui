@@ -15,6 +15,17 @@
   - `cac` for command parsing and help generation
   - `zod` for CLI and API payload validation
   - `ky` for HTTP client ergonomics (timeouts, headers, JSON)
+- CLI command registration is split by domain:
+  - `src/cli/commands/auth-command.ts`
+  - `src/cli/commands/availability-command.ts`
+  - `src/cli/commands/payment-command.ts`
+  - wired from `src/cli/router.ts`
+- Build/distribution uses Bun single-file executable compilation via `scripts/build-executable.ts`
+  with `bun build --compile`.
+- Executable build disables runtime bunfig autoload for deterministic startup (`autoloadBunfig: false`).
+- Release executable mode currently uses minify + linked sourcemap (bytecode left off for compatibility).
+- macOS targets support post-build codesign + verify via `codesign --entitlements scripts/macos-entitlements.plist`.
+- macOS build scripts (`build:exe:darwin-*`) invoke `--codesign` automatically.
 
 ## API fingerprint decisions
 - Requests mirror captured client headers by default:
@@ -47,6 +58,12 @@
 - Search results are flattened into a bookable slot list (tenant/resource/date-time/duration/price).
 - Keyboard actions in search mode:
   - `Up/Down` (or `j/k`) to select slot
-  - `B` to book selected slot
+  - first `B` arms confirmation for selected slot
+  - second `B` confirms booking charge
+  - `Esc` cancels pending booking confirmation
 - Booking action reuses shared `PurchaseService` so TUI and CLI execute identical payment flow.
 - UI displays booking progress and success message with `payment_id` after completion.
+
+## Error handling design
+- Shared formatter in `src/errors/format-error.ts` standardizes user-facing errors for CLI and TUI.
+- API errors include HTTP status + full response body; validation errors are rendered as concise issue lists.

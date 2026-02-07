@@ -16,6 +16,7 @@ export interface SearchState {
   loading: boolean;
   booking: boolean;
   selectedSlotIndex: number;
+  pendingBookingSlotIndex: number | null;
   bookingMessage: string;
   error: string;
   results: TenantAvailability[];

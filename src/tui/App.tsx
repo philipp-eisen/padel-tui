@@ -2,6 +2,7 @@ import { For, Show, createSignal, onMount } from "solid-js";
 import { useKeyboard } from "@opentui/solid";
 import type { AppContext } from "../app/context";
 import type { Session } from "../domain/types";
+import { formatErrorMessage } from "../errors/format-error";
 import type { LoginFormState, SearchState, ViewMode } from "./state";
 
 interface AppProps {
@@ -79,6 +80,7 @@ export function App(props: AppProps) {
     loading: false,
     booking: false,
     selectedSlotIndex: 0,
+    pendingBookingSlotIndex: null,
     bookingMessage: "",
     error: "",
     results: [],
@@ -127,7 +129,7 @@ export function App(props: AppProps) {
     } catch (error) {
       setLoginState((state) => ({
         ...state,
-        error: error instanceof Error ? error.message : "Login failed.",
+        error: formatErrorMessage(error),
       }));
       setMode("login");
     }
@@ -157,10 +159,11 @@ export function App(props: AppProps) {
         ...state,
         loading: false,
         selectedSlotIndex: 0,
+        pendingBookingSlotIndex: null,
         results,
       }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Search failed.";
+      const message = formatErrorMessage(error);
       if (message.includes("No active session")) {
         setMode("login");
       }
@@ -212,6 +215,7 @@ export function App(props: AppProps) {
       setSearchState((state) => ({
         ...state,
         booking: false,
+        pendingBookingSlotIndex: null,
         bookingMessage:
           `Booked ${selectedSlot.tenantName} ${selectedSlot.startTime} (${selectedSlot.price})` +
           ` payment_id=${result.final.paymentId ?? "unknown"}`,
@@ -220,7 +224,7 @@ export function App(props: AppProps) {
       setSearchState((state) => ({
         ...state,
         booking: false,
-        error: error instanceof Error ? error.message : "Booking failed.",
+        error: formatErrorMessage(error),
       }));
     }
   }
@@ -259,6 +263,7 @@ export function App(props: AppProps) {
         setSearchState((state) => ({
           ...state,
           selectedSlotIndex: Math.min(state.selectedSlotIndex + 1, slots.length - 1),
+          pendingBookingSlotIndex: null,
         }));
       }
 
@@ -266,6 +271,7 @@ export function App(props: AppProps) {
         setSearchState((state) => ({
           ...state,
           selectedSlotIndex: Math.max(state.selectedSlotIndex - 1, 0),
+          pendingBookingSlotIndex: null,
         }));
       }
 
@@ -278,7 +284,35 @@ export function App(props: AppProps) {
         !searchState().booking &&
         !searchState().loading
       ) {
-        void handleBookSelected();
+        const selectedIndex = searchState().selectedSlotIndex;
+        const selectedSlot = slots[selectedIndex];
+
+        if (!selectedSlot) {
+          setSearchState((state) => ({
+            ...state,
+            error: "No bookable slots in current results.",
+          }));
+          return;
+        }
+
+        if (searchState().pendingBookingSlotIndex === selectedIndex) {
+          void handleBookSelected();
+        } else {
+          setSearchState((state) => ({
+            ...state,
+            pendingBookingSlotIndex: selectedIndex,
+            error: "",
+            bookingMessage: `Press B again to confirm charge for ${selectedSlot.tenantName} ${selectedSlot.startTime} (${selectedSlot.price}).`,
+          }));
+        }
+      }
+
+      if (key.name === "escape") {
+        setSearchState((state) => ({
+          ...state,
+          pendingBookingSlotIndex: null,
+          bookingMessage: "",
+        }));
       }
 
       if (key.ctrl && key.name === "l") {
@@ -375,7 +409,7 @@ export function App(props: AppProps) {
           >
             <text fg={theme.text}>Search availability</text>
             <text fg={theme.muted}>
-              Tab query/date, Enter run, Up/Down select slot, B book selected, Ctrl+L logout.
+              Tab query/date, Enter run, Up/Down select slot, B then B confirms booking, Esc cancels confirmation, Ctrl+L logout.
             </text>
             <box flexDirection="row" gap={1}>
               <text fg={theme.text}>Query:</text>
@@ -442,7 +476,11 @@ export function App(props: AppProps) {
                   <text
                     fg={index() === searchState().selectedSlotIndex ? theme.accent : theme.text}
                   >
-                    {index() === searchState().selectedSlotIndex ? ">" : " "} {slot.tenantName} | {slot.startDate} {slot.startTime} | {slot.duration} min | {slot.price}
+                    {index() === searchState().selectedSlotIndex
+                      ? searchState().pendingBookingSlotIndex === index()
+                        ? "!"
+                        : ">"
+                      : " "} {slot.tenantName} | {slot.startDate} {slot.startTime} | {slot.duration} min | {slot.price}
                   </text>
                 )}
               </For>
