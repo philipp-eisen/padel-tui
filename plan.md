@@ -10,8 +10,9 @@
   - payment intent creation
   - payment method selection
   - confirmation endpoint support (`/v1/payment_intents/{id}/confirmation`)
+- Added TUI slot booking from search results using keyboard selection.
 
 ## Next
 1. Add service-level tests for purchase success/failure paths.
 2. Add command for listing available payment methods before charging.
-3. Improve TUI feedback for auth transitions and loading/errors.
+3. Add an optional confirmation prompt before TUI booking charge.

@@ -16,6 +16,38 @@ function todayIsoDate(): string {
   return `${year}-${month}-${day}`;
 }
 
+interface BookableSlot {
+  tenantName: string;
+  tenantId: string;
+  resourceId: string;
+  startDate: string;
+  startTime: string;
+  duration: number;
+  price: string;
+}
+
+function collectBookableSlots(search: SearchState): BookableSlot[] {
+  const slots: BookableSlot[] = [];
+
+  for (const tenantResult of search.results) {
+    for (const resource of tenantResult.resources) {
+      for (const slot of resource.slots) {
+        slots.push({
+          tenantName: tenantResult.tenant.tenantName,
+          tenantId: tenantResult.tenant.tenantId,
+          resourceId: resource.resourceId,
+          startDate: resource.startDate,
+          startTime: slot.startTime,
+          duration: slot.duration,
+          price: slot.price,
+        });
+      }
+    }
+  }
+
+  return slots;
+}
+
 export function App(props: AppProps) {
   const theme = {
     appBg: "#0b1020",
@@ -29,6 +61,7 @@ export function App(props: AppProps) {
     inputText: "#f8fafc",
     inputPlaceholder: "#64748b",
     error: "#fca5a5",
+    success: "#86efac",
   };
 
   const [mode, setMode] = createSignal<ViewMode>("loading");
@@ -44,6 +77,9 @@ export function App(props: AppProps) {
     date: todayIsoDate(),
     focusField: "query",
     loading: false,
+    booking: false,
+    selectedSlotIndex: 0,
+    bookingMessage: "",
     error: "",
     results: [],
   });
@@ -107,7 +143,7 @@ export function App(props: AppProps) {
       return;
     }
 
-    setSearchState((state) => ({ ...state, loading: true, error: "" }));
+    setSearchState((state) => ({ ...state, loading: true, error: "", bookingMessage: "" }));
     try {
       const results = await props.app.authService.runWithValidSession((validSession) => {
         setSession(validSession);
@@ -120,6 +156,7 @@ export function App(props: AppProps) {
       setSearchState((state) => ({
         ...state,
         loading: false,
+        selectedSlotIndex: 0,
         results,
       }));
     } catch (error) {
@@ -132,6 +169,58 @@ export function App(props: AppProps) {
         ...state,
         loading: false,
         error: message,
+      }));
+    }
+  }
+
+  async function handleBookSelected(): Promise<void> {
+    const search = searchState();
+    const slots = collectBookableSlots(search);
+    if (slots.length === 0) {
+      setSearchState((state) => ({
+        ...state,
+        error: "No bookable slots in current results.",
+      }));
+      return;
+    }
+
+    const selectedIndex = Math.max(0, Math.min(search.selectedSlotIndex, slots.length - 1));
+    const selectedSlot = slots[selectedIndex];
+    if (!selectedSlot) {
+      return;
+    }
+
+    setSearchState((state) => ({
+      ...state,
+      booking: true,
+      error: "",
+      bookingMessage: "",
+    }));
+
+    try {
+      const result = await props.app.authService.runWithValidSession((validSession) => {
+        setSession(validSession);
+        return props.app.purchaseService.purchaseSlot(validSession, {
+          tenantId: selectedSlot.tenantId,
+          resourceId: selectedSlot.resourceId,
+          start: `${selectedSlot.startDate}T${selectedSlot.startTime}`,
+          duration: selectedSlot.duration,
+          numberOfPlayers: 4,
+        });
+      });
+
+      setSearchState((state) => ({
+        ...state,
+        booking: false,
+        bookingMessage:
+          `Booked ${selectedSlot.tenantName} ${selectedSlot.startTime} (${selectedSlot.price})` +
+          ` payment_id=${result.final.paymentId ?? "unknown"}`,
+      }));
+    } catch (error) {
+      setSearchState((state) => ({
+        ...state,
+        booking: false,
+        error: error instanceof Error ? error.message : "Booking failed.",
       }));
     }
   }
@@ -157,6 +246,8 @@ export function App(props: AppProps) {
     }
 
     if (mode() === "search") {
+      const slots = collectBookableSlots(searchState());
+
       if (key.name === "tab") {
         setSearchState((state) => ({
           ...state,
@@ -164,8 +255,30 @@ export function App(props: AppProps) {
         }));
       }
 
+      if ((key.name === "down" || key.name === "j") && slots.length > 0) {
+        setSearchState((state) => ({
+          ...state,
+          selectedSlotIndex: Math.min(state.selectedSlotIndex + 1, slots.length - 1),
+        }));
+      }
+
+      if ((key.name === "up" || key.name === "k") && slots.length > 0) {
+        setSearchState((state) => ({
+          ...state,
+          selectedSlotIndex: Math.max(state.selectedSlotIndex - 1, 0),
+        }));
+      }
+
       if (isSubmitKey || (key.ctrl && key.name === "s")) {
         void handleSearch();
+      }
+
+      if (
+        (key.name === "b" || (key.ctrl && key.name === "b")) &&
+        !searchState().booking &&
+        !searchState().loading
+      ) {
+        void handleBookSelected();
       }
 
       if (key.ctrl && key.name === "l") {
@@ -261,7 +374,9 @@ export function App(props: AppProps) {
             gap={1}
           >
             <text fg={theme.text}>Search availability</text>
-            <text fg={theme.muted}>Tab query/date, Enter run, Ctrl+S run, Ctrl+L logout.</text>
+            <text fg={theme.muted}>
+              Tab query/date, Enter run, Up/Down select slot, B book selected, Ctrl+L logout.
+            </text>
             <box flexDirection="row" gap={1}>
               <text fg={theme.text}>Query:</text>
               <input
@@ -299,6 +414,12 @@ export function App(props: AppProps) {
             <Show when={searchState().loading}>
               <text fg={theme.text}>Loading availability...</text>
             </Show>
+            <Show when={searchState().booking}>
+              <text fg={theme.text}>Booking selected slot...</text>
+            </Show>
+            <Show when={Boolean(searchState().bookingMessage)}>
+              <text fg={theme.success}>{searchState().bookingMessage}</text>
+            </Show>
             <Show when={Boolean(searchState().error)}>
               <text fg={theme.error}>Error: {searchState().error}</text>
             </Show>
@@ -313,28 +434,16 @@ export function App(props: AppProps) {
             height={20}
           >
             <Show
-              when={searchState().results.length > 0}
-              fallback={<text fg={theme.muted}>No results yet.</text>}
+              when={collectBookableSlots(searchState()).length > 0}
+              fallback={<text fg={theme.muted}>No results yet. Run a search first.</text>}
             >
-              <For each={searchState().results}>
-                {(result) => (
-                  <box flexDirection="column" marginBottom={1}>
-                    <text fg={theme.text}>
-                      <strong>{result.tenant.tenantName}</strong>
-                      {result.tenant.city ? ` (${result.tenant.city})` : ""}
-                    </text>
-                    <For each={result.resources.slice(0, 4)}>
-                      {(resource) => (
-                        <For each={resource.slots.slice(0, 3)}>
-                          {(slot) => (
-                            <text fg={theme.text}>
-                              {resource.startDate} {slot.startTime} | {slot.duration} min | {slot.price}
-                            </text>
-                          )}
-                        </For>
-                      )}
-                    </For>
-                  </box>
+              <For each={collectBookableSlots(searchState())}>
+                {(slot, index) => (
+                  <text
+                    fg={index() === searchState().selectedSlotIndex ? theme.accent : theme.text}
+                  >
+                    {index() === searchState().selectedSlotIndex ? ">" : " "} {slot.tenantName} | {slot.startDate} {slot.startTime} | {slot.duration} min | {slot.price}
+                  </text>
                 )}
               </For>
             </Show>

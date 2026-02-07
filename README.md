@@ -86,6 +86,16 @@ The CLI follows the captured booking sequence:
 
 If final status is not `SUCCEEDED`, the command exits with full payment intent payload for debugging.
 
+## Booking from TUI
+
+In search mode:
+
+- Run search with `Enter` (or `Ctrl+S`)
+- Move selection with `Up/Down` (or `j/k`)
+- Press `B` to book selected slot
+
+The TUI shows booking progress and prints success with `payment_id` when completed.
+
 ## Sanitizing Mitm Exports
 
 Raw captures can contain credentials and tokens. Sanitize before sharing:

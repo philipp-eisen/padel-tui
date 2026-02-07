@@ -14,6 +14,9 @@ export interface SearchState {
   date: string;
   focusField: "query" | "date";
   loading: boolean;
+  booking: boolean;
+  selectedSlotIndex: number;
+  bookingMessage: string;
   error: string;
   results: TenantAvailability[];
 }

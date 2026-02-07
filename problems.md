@@ -23,6 +23,10 @@
 - Previous top-level error handling only printed `error.message`.
 - Updated to print full API response body and stack for debugging payment/auth failures.
 
+### 5) TUI booking discoverability
+- Search results originally showed availability only and did not provide booking action.
+- Added slot selection + booking in TUI (`Up/Down` select, `B` book), with in-app progress and success feedback.
+
 ## Evidence still useful from captures
 - Refresh failure examples (expired/invalid token) to improve error mapping.
 - Any endpoint variant used by other client versions.

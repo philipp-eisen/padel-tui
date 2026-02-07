@@ -10,6 +10,7 @@
 - Adapters isolate infrastructure:
   - Playtomic HTTP client (`src/adapters/playtomic/*`)
   - Local session persistence (`src/adapters/storage/session-store.ts`)
+- Playtomic HTTP integration is centralized in `src/adapters/playtomic/live-playtomic-api.ts`.
 
 ## API fingerprint decisions
 - Requests mirror captured client headers by default:
@@ -32,8 +33,16 @@
 ## Purchase flow design
 - Added CLI-first purchase orchestration in `PurchaseService`.
 - Implemented captured state machine:
-  - create payment intent
-  - select payment method
-  - confirm via `/v1/payment_intents/{id}/confirmation` when status is `REQUIRES_CONFIRMATION`
-  - fetch final state
+  1. `POST /v1/payment_intents`
+  2. `PATCH /v1/payment_intents/{id}`
+  3. `POST /v1/payment_intents/{id}/confirmation` (when status is `REQUIRES_CONFIRMATION`)
+  4. `GET /v1/payment_intents/{id}`
 - Full raw payment intent is preserved on domain object for debugging non-terminal outcomes.
+
+## TUI booking flow design
+- Search results are flattened into a bookable slot list (tenant/resource/date-time/duration/price).
+- Keyboard actions in search mode:
+  - `Up/Down` (or `j/k`) to select slot
+  - `B` to book selected slot
+- Booking action reuses shared `PurchaseService` so TUI and CLI execute identical payment flow.
+- UI displays booking progress and success message with `payment_id` after completion.
