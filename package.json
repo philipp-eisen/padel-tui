@@ -1,10 +1,18 @@
 {
   "name": "padel-tui",
-  "module": "src/index.tsx",
+  "module": "src/main.ts",
   "type": "module",
   "private": true,
+  "bin": {
+    "padel-tui": "./bin/padel-tui"
+  },
   "scripts": {
-    "dev": "bun run --watch src/index.tsx"
+    "dev": "bun run --watch src/main.ts",
+    "start": "bun run src/main.ts",
+    "cli": "bun run src/main.ts",
+    "tui": "bun run src/main.ts tui",
+    "sanitize:mitm": "bun run scripts/sanitize-mitm.ts",
+    "test": "bun test"
   },
   "devDependencies": {
     "@types/bun": "latest"

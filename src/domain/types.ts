@@ -1,0 +1,86 @@
+export interface Credentials {
+  email: string;
+  password: string;
+}
+
+export interface Session {
+  accessToken: string;
+  accessTokenExpiration?: string;
+  refreshToken?: string;
+  refreshTokenExpiration?: string;
+  userId: string;
+}
+
+export interface Tenant {
+  tenantId: string;
+  tenantName: string;
+  city?: string;
+  timezone?: string;
+}
+
+export interface AvailabilitySlot {
+  startTime: string;
+  duration: number;
+  price: string;
+}
+
+export interface AvailabilityResource {
+  resourceId: string;
+  startDate: string;
+  slots: AvailabilitySlot[];
+}
+
+export interface TenantAvailability {
+  tenant: Tenant;
+  resources: AvailabilityResource[];
+}
+
+export interface AvailabilitySearchInput {
+  query: string;
+  date?: string;
+  sportId?: string;
+  maxTenants?: number;
+}
+
+export interface PaymentMethod {
+  paymentMethodId: string;
+  methodType: string;
+  name: string;
+  data?: unknown;
+}
+
+export interface PaymentIntent {
+  paymentIntentId: string;
+  status: string;
+  selectedPaymentMethodId?: string | null;
+  nextPaymentAction?: string | null;
+  nextPaymentActionData?: unknown;
+  paymentId?: string | null;
+  availablePaymentMethods: PaymentMethod[];
+  raw: unknown;
+}
+
+export interface CreatePaymentIntentInput {
+  tenantId: string;
+  resourceId: string;
+  start: string;
+  duration: number;
+  numberOfPlayers: number;
+  userId?: string;
+}
+
+export interface UpdatePaymentIntentInput {
+  selectedPaymentMethodId: string;
+  selectedPaymentMethodData?: {
+    stripe_return_url?: string;
+  };
+}
+
+export interface PurchaseSlotInput {
+  tenantId: string;
+  resourceId: string;
+  start: string;
+  duration: number;
+  numberOfPlayers: number;
+  paymentMethodId?: string;
+}
