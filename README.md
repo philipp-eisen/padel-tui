@@ -79,25 +79,25 @@ bun run cli auth login --email you@example.com --password "your-password"
 bun run cli auth logout
 
 # Search by city/query and print availability
-bun run cli availability search berlin
+bun run cli search berlin
 
 # Search by geocoded location (Open-Meteo geocoding -> coordinate tenant search)
-bun run cli availability search --near berlin --radius-meters 50000
+bun run cli search --near berlin --radius-meters 50000
 
 # Optional date override
-bun run cli availability search berlin --date 2026-02-07
+bun run cli search berlin --date 2026-02-07
 
 # Restrict search output to one tenant
-bun run cli availability search berlin --tenant-id 16825678-053a-400d-b626-4c386d58706b
+bun run cli search berlin --tenant-id 16825678-053a-400d-b626-4c386d58706b
 
 # Optional cap if you want fewer tenant lookups
-bun run cli availability search berlin --max-tenants 5
+bun run cli search berlin --max-tenants 5
 
 # Purchase slot (card-on-file / selected method)
-bun run cli payment purchase --tenant-id <tenant-id> --resource-id <resource-id> --start 2026-02-16T21:00:00 --duration 60 --players 4
+bun run cli book --tenant-id <tenant-id> --resource-id <resource-id> --start 2026-02-16T21:00:00 --duration 60 --players 4
 
 # Optional explicit method id from payment_intent available methods
-bun run cli payment purchase --tenant-id <tenant-id> --resource-id <resource-id> --start 2026-02-16T21:00:00 --payment-method-id CREDIT_CARD-STRIPE_xxx
+bun run cli book --tenant-id <tenant-id> --resource-id <resource-id> --start 2026-02-16T21:00:00 --payment-method-id CREDIT_CARD-STRIPE_xxx
 ```
 
 ## Notes on Request Fingerprint

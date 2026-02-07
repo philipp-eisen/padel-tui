@@ -35,6 +35,10 @@
 - `cac` default missing-arg errors were too stack-trace heavy for normal user mistakes.
 - Added explicit usage output for incomplete commands (`auth`, `availability`, `payment`) and concise error lines without stack traces.
 
+### 13) Command hierarchy complexity
+- Nested one-action groups (`availability search`, `payment purchase`) created unnecessary friction.
+- Simplified to top-level commands: `search` and `book`, with migration hints for old forms.
+
 ### 11) TUI booking safety
 - Single-key booking (`B`) was too easy to trigger accidentally.
 - Added two-step confirmation (press `B` twice on selected slot) with `Esc` cancellation.

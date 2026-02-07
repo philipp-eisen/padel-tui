@@ -20,6 +20,9 @@
   - `src/cli/commands/availability-command.ts`
   - `src/cli/commands/payment-command.ts`
   - wired from `src/cli/router.ts`
+- Availability/payment were flattened to top-level UX commands:
+  - `padel-tui search`
+  - `padel-tui book`
 - Build/distribution uses Bun single-file executable compilation via `scripts/build-executable.ts`
   with `bun build --compile`.
 - Executable build disables runtime bunfig autoload for deterministic startup (`autoloadBunfig: false`).

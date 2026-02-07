@@ -13,13 +13,17 @@ function printGroupUsage(argv: string[]): boolean {
     return true;
   }
 
-  if (argv[0] === "availability" && !argv[1]) {
+  if (argv[0] === "availability") {
+    console.error("`availability` was simplified. Use `padel-tui search ...`.");
     printAvailabilityUsage();
+    process.exitCode = 1;
     return true;
   }
 
-  if (argv[0] === "payment" && !argv[1]) {
+  if (argv[0] === "payment") {
+    console.error("`payment` was simplified. Use `padel-tui book ...`.");
     printPaymentUsage();
+    process.exitCode = 1;
     return true;
   }
 

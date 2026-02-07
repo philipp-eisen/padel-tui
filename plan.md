@@ -25,6 +25,7 @@
 - Added optional location-based availability search (`--near`) with geocoding + coordinate tenant lookup.
 - Added optional one-tenant filtering in both CLI and TUI (`tenantId`).
 - Added day navigation in TUI search date field using left/right arrows with auto-refresh.
+- Simplified CLI surface by promoting actions to top-level commands (`search`, `book`).
 
 ## Next
 1. Add command for listing available payment methods before charging.
