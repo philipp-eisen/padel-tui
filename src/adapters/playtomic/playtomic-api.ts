@@ -16,10 +16,19 @@ export interface AvailabilityQuery {
   userId?: string;
 }
 
+export interface TenantLocationQuery {
+  lat: number;
+  lon: number;
+  radiusMeters: number;
+  sportId?: string;
+  size?: number;
+}
+
 export interface PlaytomicApi {
   login(input: Credentials): Promise<Session>;
   refreshSession(refreshToken: string): Promise<Session>;
   searchTenants(query: string, session: Session): Promise<Tenant[]>;
+  searchTenantsByLocation(query: TenantLocationQuery, session: Session): Promise<Tenant[]>;
   createPaymentIntent(
     input: CreatePaymentIntentInput,
     session: Session,

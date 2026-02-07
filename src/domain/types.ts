@@ -36,9 +36,12 @@ export interface TenantAvailability {
 }
 
 export interface AvailabilitySearchInput {
-  query: string;
+  query?: string;
+  near?: string;
+  tenantId?: string;
   date?: string;
   sportId?: string;
+  radiusMeters?: number;
   maxTenants?: number;
 }
 

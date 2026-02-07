@@ -2,12 +2,18 @@ import type { AppContext } from "../../app/context";
 import { z } from "zod";
 
 export const AvailabilitySearchInputSchema = z.object({
-  query: z.string().trim().min(1),
+  query: z.string().trim().min(1).optional(),
+  near: z.string().trim().min(1).optional(),
+  tenantId: z.string().trim().min(1).optional(),
   date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/u, "Use YYYY-MM-DD")
     .optional(),
-  maxTenants: z.coerce.number().int().positive().max(25).optional(),
+  radiusMeters: z.coerce.number().int().positive().max(250_000).optional(),
+  maxTenants: z.coerce.number().int().positive().max(500).optional(),
+}).refine((value) => Boolean(value.query || value.near), {
+  message: "Provide <query> or --near <location>",
+  path: ["query"],
 });
 
 export type AvailabilitySearchInput = z.input<typeof AvailabilitySearchInputSchema>;
@@ -21,13 +27,17 @@ export async function runAvailabilitySearchCommand(
   const results = await app.authService.runWithValidSession((session) =>
     app.availabilityService.search(session, {
       query: parsed.query,
+      near: parsed.near,
+      tenantId: parsed.tenantId,
       date: parsed.date,
+      radiusMeters: parsed.radiusMeters,
       maxTenants: parsed.maxTenants,
     }),
   );
 
   if (results.length === 0) {
-    console.log(`No tenants found for '${parsed.query}'.`);
+    const label = parsed.near ? `near '${parsed.near}'` : `'${parsed.query}'`;
+    console.log(`No tenants found for ${label}.`);
     return;
   }
 

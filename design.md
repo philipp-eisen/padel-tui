@@ -38,6 +38,11 @@
   - user-agent override: `okhttp/4.12.0`
   - omits `x-requested-with` to match capture
 
+## Location search strategy
+- Added location-based tenant discovery: geocode free-text location via Open-Meteo Geocoding API.
+- Then query Playtomic tenants with coordinate + radius to match app-style nearby search semantics.
+- Retains text tenant-name search for direct name lookups.
+
 ## TUI design decisions
 - Added explicit dark palette to avoid low-contrast defaults.
 - Inputs now use custom background/text/placeholder/cursor colors for readability.
@@ -56,6 +61,8 @@
 
 ## TUI booking flow design
 - Search results are flattened into a bookable slot list (tenant/resource/date-time/duration/price).
+- Search supports optional tenant-id restriction directly in the form.
+- Date field supports quick day navigation with Left/Right arrows (auto-refreshes availability).
 - Keyboard actions in search mode:
   - `Up/Down` (or `j/k`) to select slot
   - first `B` arms confirmation for selected slot

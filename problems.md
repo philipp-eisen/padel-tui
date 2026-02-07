@@ -53,6 +53,10 @@
 - Some cross-target executable builds fail if the matching `@opentui/core-<os>-<arch>` package is absent.
 - Added explicit preflight check with a clear actionable error message.
 
+### 12) Location semantics vs tenant-name semantics
+- Plain tenant-name text search can under-represent nearby clubs for city queries.
+- Added coordinate-based nearby search path (geocoded location -> Playtomic coordinate/radius search).
+
 ## Evidence still useful from captures
 - Refresh failure examples (expired/invalid token) to improve error mapping.
 - Any endpoint variant used by other client versions.

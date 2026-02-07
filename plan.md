@@ -22,6 +22,9 @@
 - Added shared error formatting utility used by CLI and TUI.
 - Added service-level tests for auth refresh and purchase orchestration.
 - Added TUI booking confirmation guard (double-press `B`, cancel with `Esc`).
+- Added optional location-based availability search (`--near`) with geocoding + coordinate tenant lookup.
+- Added optional one-tenant filtering in both CLI and TUI (`tenantId`).
+- Added day navigation in TUI search date field using left/right arrows with auto-refresh.
 
 ## Next
 1. Add command for listing available payment methods before charging.

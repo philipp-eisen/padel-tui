@@ -81,8 +81,17 @@ bun run cli auth logout
 # Search by city/query and print availability
 bun run cli availability search berlin
 
+# Search by geocoded location (Open-Meteo geocoding -> coordinate tenant search)
+bun run cli availability search --near berlin --radius-meters 50000
+
 # Optional date override
 bun run cli availability search berlin --date 2026-02-07
+
+# Restrict search output to one tenant
+bun run cli availability search berlin --tenant-id 16825678-053a-400d-b626-4c386d58706b
+
+# Optional cap if you want fewer tenant lookups
+bun run cli availability search berlin --max-tenants 5
 
 # Purchase slot (card-on-file / selected method)
 bun run cli payment purchase --tenant-id <tenant-id> --resource-id <resource-id> --start 2026-02-16T21:00:00 --duration 60 --players 4
@@ -139,6 +148,8 @@ If final status is not `SUCCEEDED`, the command exits with full payment intent p
 In search mode:
 
 - Run search with `Enter` (or `Ctrl+S`)
+- Use `Tab` to move focus through query/near/date/tenant fields
+- With date field focused, use `Left/Right` arrows to move day -/+1 and auto-refresh
 - Move selection with `Up/Down` (or `j/k`)
 - Press `B` once to arm booking confirmation
 - Press `B` again to confirm booking charge (`Esc` cancels confirmation)

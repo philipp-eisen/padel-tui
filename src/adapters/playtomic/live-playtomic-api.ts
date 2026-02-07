@@ -13,7 +13,7 @@ import type {
   UpdatePaymentIntentInput,
 } from "../../domain/types";
 import { PlaytomicApiError } from "./errors";
-import type { AvailabilityQuery, PlaytomicApi } from "./playtomic-api";
+import type { AvailabilityQuery, PlaytomicApi, TenantLocationQuery } from "./playtomic-api";
 
 interface RequestOptions {
   method?: "GET" | "POST" | "PATCH";
@@ -89,6 +89,9 @@ const DEFAULT_ALLOWED_PAYMENT_METHOD_TYPES = [
   "GOOGLE_PAY",
 ];
 
+const MAX_TENANT_PAGES = 100;
+const DEFAULT_TENANT_LOCATION_SIZE = 40;
+
 function withoutLeadingSlash(path: string): string {
   return path.startsWith("/") ? path.slice(1) : path;
 }
@@ -137,6 +140,29 @@ function mapPaymentIntent(response: z.infer<typeof PaymentIntentResponseSchema>)
     paymentId: response.payment_id,
     availablePaymentMethods: methods,
     raw: response,
+  };
+}
+
+function parseLastPageFromLinkHeader(linkHeader: string | null): number {
+  if (!linkHeader) {
+    return 0;
+  }
+
+  const match = linkHeader.match(/page=(\d+)[^>]*>;\s*rel="last"/u);
+  if (!match) {
+    return 0;
+  }
+
+  const value = Number(match[1]);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function mapTenant(tenant: z.infer<typeof TenantResponseSchema>): Tenant {
+  return {
+    tenantId: tenant.tenant_id,
+    tenantName: tenant.tenant_name,
+    city: tenant.address?.city,
+    timezone: tenant.address?.timezone,
   };
 }
 
@@ -192,24 +218,95 @@ export class LivePlaytomicApi implements PlaytomicApi {
   }
 
   async searchTenants(query: string, session: Session): Promise<Tenant[]> {
-    const payload = await this.requestJson(this.apiClient, {
-      path: "/v1/tenants",
-      query: {
+    const tenants = await this.fetchTenantsPaginated(
+      {
         playtomic_status: "ACTIVE",
         tenant_name: query,
         with_properties: "ALLOWS_CASH_PAYMENT,LIVE_TV_URL",
       },
       session,
-    });
+    );
 
-    const response = parseWithSchema(z.array(TenantResponseSchema), payload, "tenant search");
+    return tenants.map(mapTenant);
+  }
 
-    return response.map((tenant) => ({
-      tenantId: tenant.tenant_id,
-      tenantName: tenant.tenant_name,
-      city: tenant.address?.city,
-      timezone: tenant.address?.timezone,
-    }));
+  async searchTenantsByLocation(query: TenantLocationQuery, session: Session): Promise<Tenant[]> {
+    const tenants = await this.fetchTenantsPaginated(
+      {
+        coordinate: `${query.lat},${query.lon}`,
+        playtomic_status: "ACTIVE",
+        radius: String(query.radiusMeters),
+        size: String(query.size ?? DEFAULT_TENANT_LOCATION_SIZE),
+        sport_id: query.sportId ?? "PADEL",
+        with_properties: "ALLOWS_CASH_PAYMENT,LIVE_TV_URL",
+      },
+      session,
+    );
+
+    return tenants.map(mapTenant);
+  }
+
+  private async fetchTenantsPaginated(
+    baseParams: Record<string, string>,
+    session: Session,
+  ): Promise<z.infer<typeof TenantResponseSchema>[]> {
+    const headers: Record<string, string> = {
+      authorization: `Bearer ${session.accessToken}`,
+    };
+
+    const allTenants: z.infer<typeof TenantResponseSchema>[] = [];
+
+    try {
+      const firstResponse = await this.apiClient(withoutLeadingSlash("/v1/tenants"), {
+        method: "GET",
+        searchParams: {
+          ...baseParams,
+          page: "0",
+        },
+        headers,
+      });
+
+      const firstPayload = await firstResponse.json<unknown>();
+      const firstPage = parseWithSchema(z.array(TenantResponseSchema), firstPayload, "tenant search");
+      allTenants.push(...firstPage);
+
+      const lastPage = parseLastPageFromLinkHeader(firstResponse.headers.get("link"));
+      const pageCount = lastPage + 1;
+
+      if (pageCount > MAX_TENANT_PAGES) {
+        throw new Error(
+          `Tenant pagination exceeds safety limit (${pageCount} pages > ${MAX_TENANT_PAGES}).`,
+        );
+      }
+
+      for (let page = 1; page <= lastPage; page += 1) {
+        const response = await this.apiClient(withoutLeadingSlash("/v1/tenants"), {
+          method: "GET",
+          searchParams: {
+            ...baseParams,
+            page: String(page),
+          },
+          headers,
+        });
+
+        const payload = await response.json<unknown>();
+        const parsedPage = parseWithSchema(z.array(TenantResponseSchema), payload, "tenant search");
+        allTenants.push(...parsedPage);
+      }
+    } catch (error) {
+      if (error instanceof HTTPError) {
+        const responseBody = await error.response.text();
+        throw new PlaytomicApiError(
+          `Playtomic API request failed (${error.response.status} ${error.response.statusText})`,
+          error.response.status,
+          responseBody,
+        );
+      }
+
+      throw error;
+    }
+
+    return allTenants;
   }
 
   async createPaymentIntent(

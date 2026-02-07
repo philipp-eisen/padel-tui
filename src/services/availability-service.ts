@@ -4,9 +4,48 @@ import type {
   Session,
   TenantAvailability,
 } from "../domain/types";
+import ky from "ky";
 
 interface AvailabilityServiceOptions {
   defaultSportId: string;
+}
+
+interface GeocodingResponse {
+  results?: Array<{
+    latitude: number;
+    longitude: number;
+    name: string;
+    country?: string;
+  }>;
+}
+
+const DEFAULT_RADIUS_METERS = 50_000;
+
+async function geocodeLocation(query: string): Promise<{ lat: number; lon: number } | null> {
+  const response = await ky
+    .get("https://geocoding-api.open-meteo.com/v1/search", {
+      searchParams: {
+        name: query,
+        count: "1",
+        language: "en",
+        format: "json",
+      },
+      timeout: 10_000,
+      headers: {
+        "user-agent": "padel-tui geocoding",
+      },
+    })
+    .json<GeocodingResponse>();
+
+  const first = response.results?.[0];
+  if (!first) {
+    return null;
+  }
+
+  return {
+    lat: first.latitude,
+    lon: first.longitude,
+  };
 }
 
 function formatLocalDayBounds(date: Date): { min: string; max: string } {
@@ -41,14 +80,45 @@ export class AvailabilityService {
     session: Session,
     input: AvailabilitySearchInput,
   ): Promise<TenantAvailability[]> {
-    const tenants = await this.api.searchTenants(input.query, session);
-    const limitedTenants = tenants.slice(0, input.maxTenants ?? 5);
-    const dayBounds = formatLocalDayBounds(parseDate(input.date));
     const sportId = input.sportId ?? this.options.defaultSportId;
 
+    let tenants;
+    if (input.near && input.near.trim().length > 0) {
+      const coordinates = await geocodeLocation(input.near.trim());
+      if (!coordinates) {
+        throw new Error(`Could not geocode location '${input.near}'.`);
+      }
+
+      tenants = await this.api.searchTenantsByLocation(
+        {
+          lat: coordinates.lat,
+          lon: coordinates.lon,
+          radiusMeters: input.radiusMeters ?? DEFAULT_RADIUS_METERS,
+          sportId,
+        },
+        session,
+      );
+    } else {
+      if (!input.query || input.query.trim().length === 0) {
+        throw new Error("Search query is required when --near is not provided.");
+      }
+
+      tenants = await this.api.searchTenants(input.query, session);
+    }
+
+    const filteredTenants = input.tenantId
+      ? tenants.filter((tenant) => tenant.tenantId === input.tenantId)
+      : tenants;
+
+    const scopedTenants =
+      typeof input.maxTenants === "number"
+        ? filteredTenants.slice(0, input.maxTenants)
+        : filteredTenants;
+
+    const dayBounds = formatLocalDayBounds(parseDate(input.date));
     const results: TenantAvailability[] = [];
 
-    for (const tenant of limitedTenants) {
+    for (const tenant of scopedTenants) {
       const resources = await this.api.getAvailability(
         {
           tenantIds: [tenant.tenantId],

@@ -11,8 +11,10 @@ export interface LoginFormState {
 
 export interface SearchState {
   query: string;
+  near: string;
+  tenantId: string;
   date: string;
-  focusField: "query" | "date";
+  focusField: "query" | "near" | "date" | "tenantId";
   loading: boolean;
   booking: boolean;
   selectedSlotIndex: number;

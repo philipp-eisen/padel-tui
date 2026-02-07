@@ -17,6 +17,19 @@ function todayIsoDate(): string {
   return `${year}-${month}-${day}`;
 }
 
+function shiftIsoDateByDays(input: string, deltaDays: number): string {
+  const parsed = new Date(input);
+  if (Number.isNaN(parsed.getTime())) {
+    return input;
+  }
+
+  parsed.setDate(parsed.getDate() + deltaDays);
+  const year = parsed.getFullYear();
+  const month = `${parsed.getMonth() + 1}`.padStart(2, "0");
+  const day = `${parsed.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 interface BookableSlot {
   tenantName: string;
   tenantId: string;
@@ -75,6 +88,8 @@ export function App(props: AppProps) {
   });
   const [searchState, setSearchState] = createSignal<SearchState>({
     query: "berlin",
+    near: "",
+    tenantId: "",
     date: todayIsoDate(),
     focusField: "query",
     loading: false,
@@ -135,12 +150,16 @@ export function App(props: AppProps) {
     }
   }
 
-  async function handleSearch(): Promise<void> {
-    const search = searchState();
-    if (!search.query.trim()) {
+  async function runSearch(
+    query: string,
+    near: string,
+    date: string,
+    tenantId: string,
+  ): Promise<void> {
+    if (!query.trim() && !near.trim()) {
       setSearchState((state) => ({
         ...state,
-        error: "Search query is required.",
+        error: "Enter a query or a near location.",
       }));
       return;
     }
@@ -150,8 +169,10 @@ export function App(props: AppProps) {
       const results = await props.app.authService.runWithValidSession((validSession) => {
         setSession(validSession);
         return props.app.availabilityService.search(validSession, {
-          query: search.query,
-          date: search.date,
+          query: query.trim() || undefined,
+          near: near.trim() || undefined,
+          tenantId: tenantId.trim() || undefined,
+          date,
         });
       });
 
@@ -176,6 +197,11 @@ export function App(props: AppProps) {
     }
   }
 
+  async function handleSearch(): Promise<void> {
+    const search = searchState();
+    await runSearch(search.query, search.near, search.date, search.tenantId);
+  }
+
   async function handleBookSelected(): Promise<void> {
     const search = searchState();
     const slots = collectBookableSlots(search);
@@ -196,6 +222,7 @@ export function App(props: AppProps) {
     setSearchState((state) => ({
       ...state,
       booking: true,
+      pendingBookingSlotIndex: null,
       error: "",
       bookingMessage: "",
     }));
@@ -255,7 +282,14 @@ export function App(props: AppProps) {
       if (key.name === "tab") {
         setSearchState((state) => ({
           ...state,
-          focusField: state.focusField === "query" ? "date" : "query",
+          focusField:
+            state.focusField === "query"
+              ? "near"
+              : state.focusField === "near"
+                ? "date"
+              : state.focusField === "date"
+                ? "tenantId"
+                : "query",
         }));
       }
 
@@ -277,6 +311,25 @@ export function App(props: AppProps) {
 
       if (isSubmitKey || (key.ctrl && key.name === "s")) {
         void handleSearch();
+      }
+
+      if (
+        (key.name === "left" || key.name === "right") &&
+        !searchState().loading &&
+        searchState().focusField === "date"
+      ) {
+        const delta = key.name === "right" ? 1 : -1;
+        const nextDate = shiftIsoDateByDays(searchState().date, delta);
+
+        setSearchState((state) => ({
+          ...state,
+          date: nextDate,
+          pendingBookingSlotIndex: null,
+          bookingMessage: "",
+          error: "",
+        }));
+
+        void runSearch(searchState().query, searchState().near, nextDate, searchState().tenantId);
       }
 
       if (
@@ -409,17 +462,46 @@ export function App(props: AppProps) {
           >
             <text fg={theme.text}>Search availability</text>
             <text fg={theme.muted}>
-              Tab query/date, Enter run, Up/Down select slot, B then B confirms booking, Esc cancels confirmation, Ctrl+L logout.
+              Tab query/near/date/tenant, Enter run, Left/Right day +/-1 (on date), Up/Down select slot, B then B confirms booking, Esc cancels confirmation, Ctrl+L logout.
             </text>
             <box flexDirection="row" gap={1}>
               <text fg={theme.text}>Query:</text>
               <input
                 value={searchState().query}
                 onInput={(value) =>
-                  setSearchState((state) => ({ ...state, query: value, error: "" }))
+                  setSearchState((state) => ({
+                    ...state,
+                    query: value,
+                    error: "",
+                    pendingBookingSlotIndex: null,
+                    bookingMessage: "",
+                  }))
                 }
                 placeholder="berlin"
                 focused={searchState().focusField === "query"}
+                width={30}
+                backgroundColor={theme.inputBg}
+                focusedBackgroundColor={theme.inputFocusedBg}
+                textColor={theme.inputText}
+                placeholderColor={theme.inputPlaceholder}
+                cursorColor={theme.accent}
+              />
+            </box>
+            <box flexDirection="row" gap={1}>
+              <text fg={theme.text}>Near:</text>
+              <input
+                value={searchState().near}
+                onInput={(value) =>
+                  setSearchState((state) => ({
+                    ...state,
+                    near: value,
+                    error: "",
+                    pendingBookingSlotIndex: null,
+                    bookingMessage: "",
+                  }))
+                }
+                placeholder="optional location (e.g. berlin)"
+                focused={searchState().focusField === "near"}
                 width={30}
                 backgroundColor={theme.inputBg}
                 focusedBackgroundColor={theme.inputFocusedBg}
@@ -433,11 +515,40 @@ export function App(props: AppProps) {
               <input
                 value={searchState().date}
                 onInput={(value) =>
-                  setSearchState((state) => ({ ...state, date: value, error: "" }))
+                  setSearchState((state) => ({
+                    ...state,
+                    date: value,
+                    error: "",
+                    pendingBookingSlotIndex: null,
+                    bookingMessage: "",
+                  }))
                 }
                 placeholder="YYYY-MM-DD"
                 focused={searchState().focusField === "date"}
                 width={20}
+                backgroundColor={theme.inputBg}
+                focusedBackgroundColor={theme.inputFocusedBg}
+                textColor={theme.inputText}
+                placeholderColor={theme.inputPlaceholder}
+                cursorColor={theme.accent}
+              />
+            </box>
+            <box flexDirection="row" gap={1}>
+              <text fg={theme.text}>Tenant:</text>
+              <input
+                value={searchState().tenantId}
+                onInput={(value) =>
+                  setSearchState((state) => ({
+                    ...state,
+                    tenantId: value,
+                    error: "",
+                    pendingBookingSlotIndex: null,
+                    bookingMessage: "",
+                  }))
+                }
+                placeholder="optional tenant_id"
+                focused={searchState().focusField === "tenantId"}
+                width={40}
                 backgroundColor={theme.inputBg}
                 focusedBackgroundColor={theme.inputFocusedBg}
                 textColor={theme.inputText}
