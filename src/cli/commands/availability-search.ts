@@ -1,39 +1,33 @@
 import type { AppContext } from "../../app/context";
-import { parseArgs } from "../args";
+import { z } from "zod";
 
-function printHelp(): void {
-  console.log(
-    "Usage: padel-tui availability search <query> [--date YYYY-MM-DD] [--max-tenants N]",
-  );
-}
+export const AvailabilitySearchInputSchema = z.object({
+  query: z.string().trim().min(1),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/u, "Use YYYY-MM-DD")
+    .optional(),
+  maxTenants: z.coerce.number().int().positive().max(25).optional(),
+});
+
+export type AvailabilitySearchInput = z.input<typeof AvailabilitySearchInputSchema>;
 
 export async function runAvailabilitySearchCommand(
   app: AppContext,
-  argv: string[],
+  input: AvailabilitySearchInput,
 ): Promise<void> {
-  const { positional, flags } = parseArgs(argv);
-  const query = positional.join(" ").trim();
-
-  if (!query) {
-    printHelp();
-    return;
-  }
-
-  const maxTenants =
-    typeof flags["max-tenants"] === "string"
-      ? Number(flags["max-tenants"])
-      : undefined;
+  const parsed = AvailabilitySearchInputSchema.parse(input);
 
   const results = await app.authService.runWithValidSession((session) =>
     app.availabilityService.search(session, {
-      query,
-      date: typeof flags.date === "string" ? flags.date : undefined,
-      maxTenants,
+      query: parsed.query,
+      date: parsed.date,
+      maxTenants: parsed.maxTenants,
     }),
   );
 
   if (results.length === 0) {
-    console.log(`No tenants found for '${query}'.`);
+    console.log(`No tenants found for '${parsed.query}'.`);
     return;
   }
 

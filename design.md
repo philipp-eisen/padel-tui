@@ -11,6 +11,10 @@
   - Playtomic HTTP client (`src/adapters/playtomic/*`)
   - Local session persistence (`src/adapters/storage/session-store.ts`)
 - Playtomic HTTP integration is centralized in `src/adapters/playtomic/live-playtomic-api.ts`.
+- Foundation libraries used to reduce boilerplate:
+  - `cac` for command parsing and help generation
+  - `zod` for CLI and API payload validation
+  - `ky` for HTTP client ergonomics (timeouts, headers, JSON)
 
 ## API fingerprint decisions
 - Requests mirror captured client headers by default:

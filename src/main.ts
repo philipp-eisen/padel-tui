@@ -4,6 +4,7 @@ import { createAppContext } from "./app/context";
 import { PlaytomicApiError } from "./adapters/playtomic/errors";
 import { runCli } from "./cli/router";
 import { launchTui } from "./tui/index";
+import { ZodError } from "zod";
 
 async function main(): Promise<void> {
   const app = createAppContext();
@@ -22,11 +23,22 @@ void main().catch((error: unknown) => {
     console.error(error.message);
     console.error(`HTTP status: ${error.status}`);
     console.error(`Response body:\n${error.responseBody}`);
-    if (error.stack) {
-      console.error(error.stack);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (error instanceof ZodError) {
+    console.error("Invalid input:");
+    for (const issue of error.issues) {
+      const path = issue.path.length > 0 ? issue.path.join(".") : "root";
+      console.error(`- ${path}: ${issue.message}`);
     }
-  } else if (error instanceof Error) {
-    console.error(error.stack ?? error.message);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (error instanceof Error) {
+    console.error(error.message);
   } else {
     console.error(String(error));
   }

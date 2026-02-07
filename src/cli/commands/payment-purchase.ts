@@ -1,63 +1,31 @@
 import type { AppContext } from "../../app/context";
-import { parseArgs } from "../args";
+import { z } from "zod";
 
-function printHelp(): void {
-  console.log("Usage:");
-  console.log(
-    "  padel-tui payment purchase --tenant-id <id> --resource-id <id> --start <YYYY-MM-DDTHH:mm:ss> [--duration 60] [--players 4] [--payment-method-id <id>]",
-  );
-}
+export const PurchaseInputSchema = z.object({
+  tenantId: z.string().trim().min(1),
+  resourceId: z.string().trim().min(1),
+  start: z.string().trim().min(1),
+  duration: z.coerce.number().int().positive().default(60),
+  players: z.coerce.number().int().positive().max(8).default(4),
+  paymentMethodId: z.string().trim().min(1).optional(),
+});
 
-function getFlag(flags: Record<string, string | true>, key: string): string | undefined {
-  const value = flags[key];
-  return typeof value === "string" ? value : undefined;
-}
-
-function getNumberFlag(
-  flags: Record<string, string | true>,
-  key: string,
-  defaultValue: number,
-): number {
-  const value = getFlag(flags, key);
-  if (!value) {
-    return defaultValue;
-  }
-
-  const parsed = Number(value);
-  if (Number.isNaN(parsed)) {
-    throw new Error(`Invalid --${key} value '${value}'. Expected a number.`);
-  }
-
-  return parsed;
-}
+export type PurchaseInput = z.input<typeof PurchaseInputSchema>;
 
 export async function runPaymentPurchaseCommand(
   app: AppContext,
-  argv: string[],
+  input: PurchaseInput,
 ): Promise<void> {
-  const { flags } = parseArgs(argv);
-
-  const tenantId = getFlag(flags, "tenant-id");
-  const resourceId = getFlag(flags, "resource-id");
-  const start = getFlag(flags, "start");
-
-  if (!tenantId || !resourceId || !start) {
-    printHelp();
-    throw new Error("Missing required flags: --tenant-id, --resource-id, --start.");
-  }
-
-  const duration = getNumberFlag(flags, "duration", 60);
-  const numberOfPlayers = getNumberFlag(flags, "players", 4);
-  const paymentMethodId = getFlag(flags, "payment-method-id");
+  const parsed = PurchaseInputSchema.parse(input);
 
   const result = await app.authService.runWithValidSession((session) =>
     app.purchaseService.purchaseSlot(session, {
-      tenantId,
-      resourceId,
-      start,
-      duration,
-      numberOfPlayers,
-      paymentMethodId,
+      tenantId: parsed.tenantId,
+      resourceId: parsed.resourceId,
+      start: parsed.start,
+      duration: parsed.duration,
+      numberOfPlayers: parsed.players,
+      paymentMethodId: parsed.paymentMethodId,
     }),
   );
 

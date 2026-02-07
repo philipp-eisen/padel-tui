@@ -27,6 +27,14 @@
 - Search results originally showed availability only and did not provide booking action.
 - Added slot selection + booking in TUI (`Up/Down` select, `B` book), with in-app progress and success feedback.
 
+### 6) CLI/API boilerplate
+- Hand-rolled arg parsing and ad-hoc response assumptions were getting noisy and brittle.
+- Introduced `cac` + `zod` + `ky` to centralize parsing, validation, and request mechanics.
+
+### 7) CLI error UX
+- `cac` default missing-arg errors were too stack-trace heavy for normal user mistakes.
+- Added explicit usage output for incomplete commands (`auth`, `availability`, `payment`) and concise error lines without stack traces.
+
 ## Evidence still useful from captures
 - Refresh failure examples (expired/invalid token) to improve error mapping.
 - Any endpoint variant used by other client versions.

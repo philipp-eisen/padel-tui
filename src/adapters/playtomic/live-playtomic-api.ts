@@ -1,3 +1,5 @@
+import ky, { HTTPError, type KyInstance } from "ky";
+import { z } from "zod";
 import type { AppConfig } from "../../config";
 import type {
   AvailabilityResource,
@@ -19,59 +21,57 @@ interface RequestOptions {
   query?: Record<string, string | undefined>;
   body?: unknown;
   session?: Session;
-  userAgent?: string;
-  includeRequestedWith?: boolean;
 }
 
-interface LoginResponse {
-  access_token: string;
-  access_token_expiration?: string;
-  refresh_token?: string;
-  refresh_token_expiration?: string;
-  user_id: string;
-}
+const SessionResponseSchema = z.object({
+  access_token: z.string().min(1),
+  access_token_expiration: z.string().optional(),
+  refresh_token: z.string().optional(),
+  refresh_token_expiration: z.string().optional(),
+  user_id: z.string().min(1),
+});
 
-interface RefreshResponse {
-  access_token: string;
-  access_token_expiration?: string;
-  refresh_token?: string;
-  refresh_token_expiration?: string;
-  user_id: string;
-}
+const TenantResponseSchema = z.object({
+  tenant_id: z.string().min(1),
+  tenant_name: z.string().min(1),
+  address: z
+    .object({
+      city: z.string().optional(),
+      timezone: z.string().optional(),
+    })
+    .optional(),
+});
 
-interface TenantResponse {
-  tenant_id: string;
-  tenant_name: string;
-  address?: {
-    city?: string;
-    timezone?: string;
-  };
-}
+const AvailabilityResponseSchema = z.object({
+  resource_id: z.string().min(1),
+  start_date: z.string().min(1),
+  slots: z.array(
+    z.object({
+      start_time: z.string().min(1),
+      duration: z.number().int().positive(),
+      price: z.string().min(1),
+    }),
+  ),
+});
 
-interface AvailabilityResponse {
-  resource_id: string;
-  start_date: string;
-  slots: Array<{
-    start_time: string;
-    duration: number;
-    price: string;
-  }>;
-}
-
-interface PaymentIntentResponse {
-  payment_intent_id: string;
-  status: string;
-  selected_payment_method_id?: string | null;
-  next_payment_action?: string | null;
-  next_payment_action_data?: unknown;
-  payment_id?: string | null;
-  available_payment_methods?: Array<{
-    payment_method_id: string;
-    method_type: string;
-    name: string;
-    data?: unknown;
-  }>;
-}
+const PaymentIntentResponseSchema = z.object({
+  payment_intent_id: z.string().min(1),
+  status: z.string().min(1),
+  selected_payment_method_id: z.string().optional().nullable(),
+  next_payment_action: z.string().optional().nullable(),
+  next_payment_action_data: z.unknown().optional(),
+  payment_id: z.string().optional().nullable(),
+  available_payment_methods: z
+    .array(
+      z.object({
+        payment_method_id: z.string().min(1),
+        method_type: z.string().min(1),
+        name: z.string().min(1),
+        data: z.unknown().optional(),
+      }),
+    )
+    .optional(),
+});
 
 const DEFAULT_ALLOWED_PAYMENT_METHOD_TYPES = [
   "DIRECT",
@@ -89,15 +89,44 @@ const DEFAULT_ALLOWED_PAYMENT_METHOD_TYPES = [
   "GOOGLE_PAY",
 ];
 
-function mapPaymentIntent(response: PaymentIntentResponse): PaymentIntent {
-  const methods: PaymentMethod[] = (response.available_payment_methods ?? []).map(
-    (method) => ({
-      paymentMethodId: method.payment_method_id,
-      methodType: method.method_type,
-      name: method.name,
-      data: method.data,
-    }),
-  );
+function withoutLeadingSlash(path: string): string {
+  return path.startsWith("/") ? path.slice(1) : path;
+}
+
+function formatZodError(error: z.ZodError): string {
+  return error.issues
+    .map((issue) => {
+      const path = issue.path.length > 0 ? issue.path.join(".") : "root";
+      return `${path}: ${issue.message}`;
+    })
+    .join("; ");
+}
+
+function parseWithSchema<T>(schema: z.ZodType<T>, payload: unknown, context: string): T {
+  const parsed = schema.safeParse(payload);
+  if (!parsed.success) {
+    throw new Error(`Invalid ${context} response: ${formatZodError(parsed.error)}`);
+  }
+  return parsed.data;
+}
+
+function mapSession(response: z.infer<typeof SessionResponseSchema>): Session {
+  return {
+    accessToken: response.access_token,
+    accessTokenExpiration: response.access_token_expiration,
+    refreshToken: response.refresh_token,
+    refreshTokenExpiration: response.refresh_token_expiration,
+    userId: response.user_id,
+  };
+}
+
+function mapPaymentIntent(response: z.infer<typeof PaymentIntentResponseSchema>): PaymentIntent {
+  const methods: PaymentMethod[] = (response.available_payment_methods ?? []).map((method) => ({
+    paymentMethodId: method.payment_method_id,
+    methodType: method.method_type,
+    name: method.name,
+    data: method.data,
+  }));
 
   return {
     paymentIntentId: response.payment_intent_id,
@@ -112,26 +141,58 @@ function mapPaymentIntent(response: PaymentIntentResponse): PaymentIntent {
 }
 
 export class LivePlaytomicApi implements PlaytomicApi {
-  constructor(private readonly config: AppConfig) {}
+  private readonly apiClient: KyInstance;
+  private readonly refreshClient: KyInstance;
+
+  constructor(private readonly config: AppConfig) {
+    const normalizedBaseUrl = this.config.apiBaseUrl.replace(/\/+$/u, "");
+
+    this.apiClient = ky.create({
+      prefixUrl: normalizedBaseUrl,
+      timeout: this.config.requestTimeoutMs,
+      headers: {
+        "accept-language": this.config.defaultAcceptLanguage,
+        "content-type": "application/json",
+        "x-requested-with": this.config.defaultRequestedWith,
+        "user-agent": this.config.defaultUserAgent,
+      },
+    });
+
+    this.refreshClient = ky.create({
+      prefixUrl: normalizedBaseUrl,
+      timeout: this.config.requestTimeoutMs,
+      headers: {
+        "accept-language": this.config.defaultAcceptLanguage,
+        "content-type": "application/json",
+        "user-agent": "okhttp/4.12.0",
+      },
+    });
+  }
 
   async login(input: Credentials): Promise<Session> {
-    const response = await this.request<LoginResponse>({
+    const payload = await this.requestJson(this.apiClient, {
       method: "POST",
       path: "/v3/auth/login",
       body: input,
     });
+    const response = parseWithSchema(SessionResponseSchema, payload, "auth login");
+    return mapSession(response);
+  }
 
-    return {
-      accessToken: response.access_token,
-      accessTokenExpiration: response.access_token_expiration,
-      refreshToken: response.refresh_token,
-      refreshTokenExpiration: response.refresh_token_expiration,
-      userId: response.user_id,
-    };
+  async refreshSession(refreshToken: string): Promise<Session> {
+    const payload = await this.requestJson(this.refreshClient, {
+      method: "POST",
+      path: "/v3/auth/token",
+      body: {
+        refresh_token: refreshToken,
+      },
+    });
+    const response = parseWithSchema(SessionResponseSchema, payload, "auth token refresh");
+    return mapSession(response);
   }
 
   async searchTenants(query: string, session: Session): Promise<Tenant[]> {
-    const response = await this.request<TenantResponse[]>({
+    const payload = await this.requestJson(this.apiClient, {
       path: "/v1/tenants",
       query: {
         playtomic_status: "ACTIVE",
@@ -141,6 +202,8 @@ export class LivePlaytomicApi implements PlaytomicApi {
       session,
     });
 
+    const response = parseWithSchema(z.array(TenantResponseSchema), payload, "tenant search");
+
     return response.map((tenant) => ({
       tenantId: tenant.tenant_id,
       tenantName: tenant.tenant_name,
@@ -149,31 +212,11 @@ export class LivePlaytomicApi implements PlaytomicApi {
     }));
   }
 
-  async refreshSession(refreshToken: string): Promise<Session> {
-    const response = await this.request<RefreshResponse>({
-      method: "POST",
-      path: "/v3/auth/token",
-      body: {
-        refresh_token: refreshToken,
-      },
-      userAgent: "okhttp/4.12.0",
-      includeRequestedWith: false,
-    });
-
-    return {
-      accessToken: response.access_token,
-      accessTokenExpiration: response.access_token_expiration,
-      refreshToken: response.refresh_token,
-      refreshTokenExpiration: response.refresh_token_expiration,
-      userId: response.user_id,
-    };
-  }
-
   async createPaymentIntent(
     input: CreatePaymentIntentInput,
     session: Session,
   ): Promise<PaymentIntent> {
-    const response = await this.request<PaymentIntentResponse>({
+    const payload = await this.requestJson(this.apiClient, {
       method: "POST",
       path: "/v1/payment_intents",
       session,
@@ -198,7 +241,7 @@ export class LivePlaytomicApi implements PlaytomicApi {
       },
     });
 
-    return mapPaymentIntent(response);
+    return mapPaymentIntent(parseWithSchema(PaymentIntentResponseSchema, payload, "create payment intent"));
   }
 
   async updatePaymentIntent(
@@ -206,7 +249,7 @@ export class LivePlaytomicApi implements PlaytomicApi {
     input: UpdatePaymentIntentInput,
     session: Session,
   ): Promise<PaymentIntent> {
-    const response = await this.request<PaymentIntentResponse>({
+    const payload = await this.requestJson(this.apiClient, {
       method: "PATCH",
       path: `/v1/payment_intents/${paymentIntentId}`,
       session,
@@ -216,38 +259,35 @@ export class LivePlaytomicApi implements PlaytomicApi {
       },
     });
 
-    return mapPaymentIntent(response);
+    return mapPaymentIntent(parseWithSchema(PaymentIntentResponseSchema, payload, "update payment intent"));
   }
 
-  async confirmPaymentIntent(
-    paymentIntentId: string,
-    session: Session,
-  ): Promise<PaymentIntent> {
-    const response = await this.request<PaymentIntentResponse>({
+  async confirmPaymentIntent(paymentIntentId: string, session: Session): Promise<PaymentIntent> {
+    const payload = await this.requestJson(this.apiClient, {
       method: "POST",
       path: `/v1/payment_intents/${paymentIntentId}/confirmation`,
       session,
       body: {},
     });
 
-    return mapPaymentIntent(response);
+    return mapPaymentIntent(parseWithSchema(PaymentIntentResponseSchema, payload, "confirm payment intent"));
   }
 
   async getPaymentIntent(paymentIntentId: string, session: Session): Promise<PaymentIntent> {
-    const response = await this.request<PaymentIntentResponse>({
+    const payload = await this.requestJson(this.apiClient, {
       method: "GET",
       path: `/v1/payment_intents/${paymentIntentId}`,
       session,
     });
 
-    return mapPaymentIntent(response);
+    return mapPaymentIntent(parseWithSchema(PaymentIntentResponseSchema, payload, "get payment intent"));
   }
 
   async getAvailability(
     query: AvailabilityQuery,
     session: Session,
   ): Promise<AvailabilityResource[]> {
-    const response = await this.request<AvailabilityResponse[]>({
+    const payload = await this.requestJson(this.apiClient, {
       path: "/v1/availability",
       query: {
         local_start_min: query.localStartMin,
@@ -258,6 +298,12 @@ export class LivePlaytomicApi implements PlaytomicApi {
       },
       session,
     });
+
+    const response = parseWithSchema(
+      z.array(AvailabilityResponseSchema),
+      payload,
+      "availability",
+    );
 
     return response.map((resource) => ({
       resourceId: resource.resource_id,
@@ -270,54 +316,33 @@ export class LivePlaytomicApi implements PlaytomicApi {
     }));
   }
 
-  private async request<T>(options: RequestOptions): Promise<T> {
-    const url = new URL(options.path, this.config.apiBaseUrl);
-
-    if (options.query) {
-      for (const [key, value] of Object.entries(options.query)) {
-        if (value) {
-          url.searchParams.set(key, value);
-        }
-      }
-    }
-
-    const headers = new Headers({
-      "accept-language": this.config.defaultAcceptLanguage,
-      "content-type": "application/json",
-      "user-agent": options.userAgent ?? this.config.defaultUserAgent,
-    });
-
-    if (options.includeRequestedWith ?? true) {
-      headers.set("x-requested-with", this.config.defaultRequestedWith);
-    }
-
+  private async requestJson(
+    client: KyInstance,
+    options: RequestOptions,
+  ): Promise<unknown> {
+    const headers: Record<string, string> = {};
     if (options.session) {
-      headers.set("authorization", `Bearer ${options.session.accessToken}`);
+      headers.authorization = `Bearer ${options.session.accessToken}`;
     }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.config.requestTimeoutMs);
 
     try {
-      const response = await fetch(url, {
+      return await client(withoutLeadingSlash(options.path), {
         method: options.method ?? "GET",
+        searchParams: options.query,
+        json: options.body,
         headers,
-        body: options.body ? JSON.stringify(options.body) : undefined,
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        const responseBody = await response.text();
+      }).json<unknown>();
+    } catch (error) {
+      if (error instanceof HTTPError) {
+        const responseBody = await error.response.text();
         throw new PlaytomicApiError(
-          `Playtomic API request failed (${response.status} ${response.statusText})`,
-          response.status,
+          `Playtomic API request failed (${error.response.status} ${error.response.statusText})`,
+          error.response.status,
           responseBody,
         );
       }
 
-      return (await response.json()) as T;
-    } finally {
-      clearTimeout(timeout);
+      throw error;
     }
   }
 }

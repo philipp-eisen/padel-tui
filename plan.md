@@ -11,6 +11,9 @@
   - payment method selection
   - confirmation endpoint support (`/v1/payment_intents/{id}/confirmation`)
 - Added TUI slot booking from search results using keyboard selection.
+- Replaced custom CLI arg parsing with `cac` command definitions.
+- Added `zod` validation for CLI inputs and key Playtomic API responses.
+- Migrated Playtomic transport from raw `fetch` boilerplate to `ky`.
 
 ## Next
 1. Add service-level tests for purchase success/failure paths.
