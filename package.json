@@ -9,8 +9,6 @@
   "scripts": {
     "dev": "bun run --watch src/main.ts",
     "start": "bun run src/main.ts",
-    "cli": "bun run src/main.ts",
-    "tui": "bun run src/main.ts tui",
     "build:exe": "bun run scripts/build-executable.ts",
     "build:exe:release": "bun run scripts/build-executable.ts --release",
     "build:exe:linux-x64": "bun run scripts/build-executable.ts --target=bun-linux-x64-baseline",
@@ -18,7 +16,6 @@
     "build:exe:windows-x64": "bun run scripts/build-executable.ts --target=bun-windows-x64-baseline --outfile=dist/padel-tui.exe",
     "build:exe:darwin-arm64": "bun run scripts/build-executable.ts --target=bun-darwin-arm64 --codesign",
     "build:exe:darwin-x64": "bun run scripts/build-executable.ts --target=bun-darwin-x64 --codesign",
-    "sanitize:mitm": "bun run scripts/sanitize-mitm.ts",
     "test": "bun test"
   },
   "devDependencies": {

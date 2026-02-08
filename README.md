@@ -1,18 +1,13 @@
 # padel-tui
 
-TUI-first terminal app for searching and booking padel courts on Playtomic.
+Terminal app (TUI + CLI) for Playtomic.
 
-## What it does today
+## Current features
 
-- Search availabilities (TUI + CLI)
-- Book available slots (TUI + CLI)
-- List active matches (TUI + CLI)
-- Cancel active matches (TUI + CLI)
-
-## Planned next
-
-- List existing bookings
-- Cancel bookings
+- Search availabilities
+- Book slots
+- List active matches
+- Cancel active matches
 
 ## Install
 
@@ -20,83 +15,40 @@ TUI-first terminal app for searching and booking padel courts on Playtomic.
 bun install
 ```
 
-## Run (TUI)
+## Run
 
 ```bash
-# default entrypoint (TUI)
+# default: opens TUI
 bun run start
 
-# explicit TUI command
-bun run tui
+# CLI examples
+bun run src/main.ts auth login --email you@example.com
+bun run src/main.ts search --near berlin --date 2026-02-11
+bun run src/main.ts search --name "Berlin venue" --date 2026-02-11
+bun run src/main.ts matches --size 30
+bun run src/main.ts match-cancel --match-id <match-id>
+bun run src/main.ts book --tenant-id <tenant-id> --resource-id <resource-id> --start 2026-02-16T21:00:00 --duration 60 --players 4
 ```
 
-## Use Prebuilt Binaries
+## Prebuilt binaries
 
-Download the archive for your platform from GitHub Releases (currently Linux + macOS arm64), extract it, then run:
+Download release assets (currently Linux + macOS arm64), extract, then run:
 
 ```bash
-# macOS / Linux
 tar -xzf padel-tui-<version>-<platform>.tar.gz
 chmod +x padel-tui
 ./padel-tui
-
-# CLI examples with binary
-./padel-tui auth login --email you@example.com
-./padel-tui search --near berlin --date 2026-02-11
 ```
 
-## TUI Quick Guide
+## TUI keys (quick)
 
-- Login: `Tab` switches email/password, `Enter` submits.
-- Search area:
-  - Type in `location` or `venue` depending on mode.
-  - `Tab` switches mode.
-  - `Left/Right` changes date.
-  - `Enter` runs search.
-- Results area:
-  - `Down` from search moves focus to the list.
-  - `Up/Down` navigates places and expanded slots.
-  - `Enter` or `Right` expands a place.
-  - `Left` collapses expanded slots.
-- Booking confirmation (inline under selected slot):
-  - `Enter` opens confirm row.
-  - Default is `No`.
-  - `Left/Right` toggles `No`/`Yes`.
-  - `Enter` applies choice, `Esc` cancels.
-- Global: `Ctrl+L` logs out.
-- Active matches panel (on main screen):
-  - `Down` from search focuses active matches.
-  - `Delete` opens cancel confirmation for selected match.
-  - `Left/Right` choose `No`/`Yes`, `Enter` applies, `Esc` cancels.
-  - `R` refreshes matches.
+- Search: `Tab` mode, `Left/Right` date, `Enter` search
+- Navigation: `Up/Down` move focus and rows
+- Booking: `Enter` / `Right` expand, `Enter` confirm prompt, `Left` collapse
+- Matches panel: `Delete` cancel prompt, `R` refresh
+- Global: `Ctrl+L` logout
 
-## CLI (from source)
-
-```bash
-# login (password prompt is hidden if --password is omitted)
-bun run cli auth login --email you@example.com
-
-# logout
-bun run cli auth logout
-
-# search (requires either --near or --name)
-bun run cli search --near berlin --date 2026-02-11
-bun run cli search --name "Berlin venue" --date 2026-02-11
-
-# list active matches
-bun run cli matches --size 30
-
-# cancel a match
-bun run cli match-cancel --match-id <match-id>
-
-# book
-bun run cli book --tenant-id <tenant-id> --resource-id <resource-id> --start 2026-02-16T21:00:00 --duration 60 --players 4
-```
-
-## Session File
-
-Session is stored at:
+## Session file
 
 - `~/.config/padel-tui/session.json`
-
-Override with `PADEL_TUI_SESSION_FILE`.
+- Override with `PADEL_TUI_SESSION_FILE`
