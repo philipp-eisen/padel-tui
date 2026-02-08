@@ -22,6 +22,22 @@ interface SearchScreenProps {
 }
 
 export function SearchScreen(props: SearchScreenProps) {
+  const status = () => {
+    if (props.state.error) {
+      return { text: `Error: ${props.state.error}`, color: props.theme.error };
+    }
+
+    if (props.state.booking) {
+      return { text: "Booking selected slot...", color: props.theme.text };
+    }
+
+    if (props.state.bookingMessage) {
+      return { text: props.state.bookingMessage, color: props.theme.success };
+    }
+
+    return { text: "", color: props.theme.muted };
+  };
+
   return (
     <box flexDirection="column" flexGrow={1}>
       <SearchToolbar
@@ -36,6 +52,10 @@ export function SearchScreen(props: SearchScreenProps) {
       />
 
       <LoadingStrip loading={props.state.loading} theme={props.theme} />
+
+      <box height={1} paddingLeft={1} paddingRight={1} backgroundColor={props.theme.panelBg}>
+        <text fg={status().color}>{status().text}</text>
+      </box>
 
       <PlacesTable
         summaries={props.summaries}

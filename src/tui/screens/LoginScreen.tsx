@@ -38,18 +38,23 @@ export function LoginScreen(props: LoginScreenProps) {
       </box>
       <box flexDirection="row" gap={1}>
         <text fg={props.theme.text}>Password:</text>
-        <input
-          value={props.state.password}
-          onInput={props.onPasswordInput}
-          placeholder="password"
-          focused={props.state.focusField === "password"}
-          width={42}
-          backgroundColor={props.theme.inputBg}
-          focusedBackgroundColor={props.theme.inputFocusedBg}
-          textColor={props.theme.inputText}
-          placeholderColor={props.theme.inputPlaceholder}
-          cursorColor={props.theme.accent}
-        />
+        <box position="relative" width={42}>
+          <input
+            value={props.state.password}
+            onInput={props.onPasswordInput}
+            placeholder="password"
+            focused={props.state.focusField === "password"}
+            width={42}
+            backgroundColor={props.theme.inputBg}
+            focusedBackgroundColor={props.theme.inputFocusedBg}
+            textColor={props.theme.inputBg}
+            placeholderColor={props.theme.inputPlaceholder}
+            cursorColor={props.theme.accent}
+          />
+          <box position="absolute" left={0} top={0} width={42}>
+            <text fg={props.theme.inputText}>{"*".repeat(props.state.password.length)}</text>
+          </box>
+        </box>
       </box>
       <Show when={Boolean(props.state.error)}>
         <text fg={props.theme.error}>Error: {props.state.error}</text>
