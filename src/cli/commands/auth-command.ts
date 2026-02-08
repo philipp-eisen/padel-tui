@@ -14,7 +14,7 @@ export function registerAuthCommands(cli: CAC, app: AppContext): void {
   cli
     .command("auth <action>", "Auth commands")
     .option("--email <email>", "Email for login")
-    .option("--password <password>", "Password for login")
+    .option("--password <password>", "Password for login (omit to prompt securely)")
     .action(async (action: string, options: OptionBag) => {
       if (action === "login") {
         await runAuthLoginCommand(app, {

@@ -32,6 +32,8 @@ function toggleSearchMode(mode: SearchMode): SearchMode {
 type BookingPromptChoice = "reject" | "confirm";
 
 export function App(props: AppProps) {
+  let latestSearchRequestId = 0;
+
   const [mode, setMode] = createSignal<ViewMode>("loading");
   const [, setSession] = createSignal<Session | null>(null);
   const [loginState, setLoginState] = createSignal<LoginFormState>({
@@ -59,6 +61,10 @@ export function App(props: AppProps) {
   const [bookingPromptChoice, setBookingPromptChoice] = createSignal<BookingPromptChoice>("reject");
 
   const placeSummaries = createMemo(() => summarizeAvailablePlaces(searchState().results));
+
+  function invalidatePendingSearch(): void {
+    latestSearchRequestId += 1;
+  }
 
   onMount(async () => {
     try {
@@ -119,6 +125,8 @@ export function App(props: AppProps) {
       return;
     }
 
+    const requestId = ++latestSearchRequestId;
+
     setSearchState((state) => ({ ...state, loading: true, error: "", bookingMessage: "" }));
     try {
       const results = await props.app.authService.runWithValidSession((validSession) => {
@@ -130,17 +138,29 @@ export function App(props: AppProps) {
         });
       });
 
+      if (requestId !== latestSearchRequestId) {
+        return;
+      }
+
       setSearchState((state) => ({
         ...state,
-        loading: false,
-        focusField: "search",
-        selectedPlaceIndex: 0,
-        expandedPlaceIndex: null,
-        selectedExpandedSlotIndex: 0,
-        pendingBookingPlaceIndex: null,
-        results,
+        ...(state.term.trim() !== trimmedTerm || state.mode !== searchMode || state.date !== date
+          ? { loading: false }
+          : {
+              loading: false,
+              focusField: "search",
+              selectedPlaceIndex: 0,
+              expandedPlaceIndex: null,
+              selectedExpandedSlotIndex: 0,
+              pendingBookingPlaceIndex: null,
+              results,
+            }),
       }));
     } catch (error) {
+      if (requestId !== latestSearchRequestId) {
+        return;
+      }
+
       const message = formatErrorMessage(error);
       if (message.includes("No active session")) {
         setMode("login");
@@ -243,7 +263,9 @@ export function App(props: AppProps) {
           ...state,
           focusField: state.focusField === "email" ? "password" : "email",
         }));
+        return;
       }
+
       if (isSubmitKey || (key.ctrl && key.name === "s")) {
         void handleLogin();
       }
@@ -303,9 +325,12 @@ export function App(props: AppProps) {
 
     if (search.focusField === "search") {
       if (key.name === "tab") {
+        invalidatePendingSearch();
         setSearchState((state) => ({
           ...state,
           mode: toggleSearchMode(state.mode),
+          loading: false,
+          results: [],
           expandedPlaceIndex: null,
           selectedExpandedSlotIndex: 0,
           pendingBookingPlaceIndex: null,
@@ -316,21 +341,20 @@ export function App(props: AppProps) {
       }
 
       if ((key.name === "left" || key.name === "right") && !search.loading) {
+        invalidatePendingSearch();
         const delta = key.name === "right" ? 1 : -1;
         const nextDate = shiftIsoDateByDays(search.date, delta);
         setSearchState((state) => ({
           ...state,
           date: nextDate,
+          loading: false,
+          results: [],
           expandedPlaceIndex: null,
           selectedExpandedSlotIndex: 0,
           pendingBookingPlaceIndex: null,
           bookingMessage: "",
           error: "",
         }));
-
-        if (search.term.trim().length > 0) {
-          void runSearch(search.term, search.mode, nextDate);
-        }
         return;
       }
 
@@ -509,9 +533,12 @@ export function App(props: AppProps) {
             bookingPromptOpen={bookingPromptOpen()}
             bookingPromptChoice={bookingPromptChoice()}
             onTermInput={(value: string) => {
+              invalidatePendingSearch();
               setSearchState((state) => ({
                 ...state,
                 term: value,
+                loading: false,
+                results: [],
                 error: "",
                 expandedPlaceIndex: null,
                 selectedExpandedSlotIndex: 0,
@@ -525,9 +552,12 @@ export function App(props: AppProps) {
               closeBookingPrompt();
             }}
             onToggleMode={() => {
+              invalidatePendingSearch();
               setSearchState((state) => ({
                 ...state,
                 mode: toggleSearchMode(state.mode),
+                loading: false,
+                results: [],
                 error: "",
                 expandedPlaceIndex: null,
                 selectedExpandedSlotIndex: 0,

@@ -1,4 +1,4 @@
-import { For, Show } from "solid-js";
+import { For, Match, Show, Switch } from "solid-js";
 import type { SearchFocusField } from "../state";
 import type { PlaceSummary } from "../types";
 import type { TuiTheme } from "../theme";
@@ -16,6 +16,7 @@ const SLOT_COL_TIME = 10;
 const SLOT_COL_DUR = 7;
 const SLOT_COL_PRICE = 12;
 const SLOT_COL_TYPE = 7;
+const EMPTY_FILL_LINES = 20;
 
 interface PlacesTableProps {
   summaries: PlaceSummary[];
@@ -48,42 +49,80 @@ export function PlacesTable(props: PlacesTableProps) {
   };
 
   return (
-    <scrollbox
-      border
-      borderColor={props.focusField === "results" ? props.theme.accent : props.theme.panelBorder}
-      backgroundColor={props.theme.panelBg}
-      paddingTop={1}
-      paddingLeft={1}
-      paddingRight={1}
-      flexDirection="column"
-      flexGrow={1}
-      onMouseDown={props.onFocusResults}
-    >
-      <box flexDirection="row" marginBottom={1}>
-        <box width={COL_MARKER}>
-          <text fg={props.theme.muted}> </text>
-        </box>
-        <box width={COL_NAME}>
-          <text fg={props.theme.muted}>LOCATION</text>
-        </box>
-        <box width={COL_ADDRESS}>
-          <text fg={props.theme.muted}>ADDRESS</text>
-        </box>
-        <box width={COL_SLOTS}>
-          <text fg={props.theme.muted}>SLOTS</text>
-        </box>
-        <box width={COL_COURTS}>
-          <text fg={props.theme.muted}>COURTS</text>
-        </box>
-        <box width={COL_FROM}>
-          <text fg={props.theme.muted}>FROM</text>
-        </box>
-      </box>
-      <Show
-        when={props.summaries.length > 0}
-        fallback={<text fg={props.theme.muted}>No places yet. Enter search text and press Enter.</text>}
-      >
-        <For each={props.summaries}>
+    <Switch>
+      <Match when={props.summaries.length === 0}>
+        <scrollbox
+          border
+          borderColor={props.focusField === "results" ? props.theme.accent : props.theme.panelBorder}
+          backgroundColor={props.theme.panelBg}
+          paddingTop={1}
+          paddingLeft={1}
+          paddingRight={1}
+          flexDirection="column"
+          flexGrow={1}
+          onMouseDown={props.onFocusResults}
+        >
+          <box flexDirection="row" marginBottom={1}>
+            <box width={COL_MARKER}>
+              <text fg={props.theme.muted}> </text>
+            </box>
+            <box width={COL_NAME}>
+              <text fg={props.theme.muted}>LOCATION</text>
+            </box>
+            <box width={COL_ADDRESS}>
+              <text fg={props.theme.muted}>ADDRESS</text>
+            </box>
+            <box width={COL_SLOTS}>
+              <text fg={props.theme.muted}>SLOTS</text>
+            </box>
+            <box width={COL_COURTS}>
+              <text fg={props.theme.muted}>COURTS</text>
+            </box>
+            <box width={COL_FROM}>
+              <text fg={props.theme.muted}>FROM</text>
+            </box>
+          </box>
+          <box flexDirection="column" flexGrow={1} backgroundColor={props.theme.panelBg}>
+            <text fg={props.theme.muted}>No places yet. Enter search text and press Enter.</text>
+            <For each={Array.from({ length: EMPTY_FILL_LINES })}>
+              {() => <box height={1} backgroundColor={props.theme.panelBg} />}
+            </For>
+          </box>
+        </scrollbox>
+      </Match>
+      <Match when={true}>
+        <scrollbox
+          border
+          borderColor={props.focusField === "results" ? props.theme.accent : props.theme.panelBorder}
+          backgroundColor={props.theme.panelBg}
+          paddingTop={1}
+          paddingLeft={1}
+          paddingRight={1}
+          flexDirection="column"
+          flexGrow={1}
+          onMouseDown={props.onFocusResults}
+        >
+          <box flexDirection="row" marginBottom={1}>
+            <box width={COL_MARKER}>
+              <text fg={props.theme.muted}> </text>
+            </box>
+            <box width={COL_NAME}>
+              <text fg={props.theme.muted}>LOCATION</text>
+            </box>
+            <box width={COL_ADDRESS}>
+              <text fg={props.theme.muted}>ADDRESS</text>
+            </box>
+            <box width={COL_SLOTS}>
+              <text fg={props.theme.muted}>SLOTS</text>
+            </box>
+            <box width={COL_COURTS}>
+              <text fg={props.theme.muted}>COURTS</text>
+            </box>
+            <box width={COL_FROM}>
+              <text fg={props.theme.muted}>FROM</text>
+            </box>
+          </box>
+          <For each={props.summaries}>
           {(summary, index) => {
             const isSelected = () => index() === props.selectedPlaceIndex;
             const isExpanded = () => index() === props.expandedPlaceIndex;
@@ -219,7 +258,7 @@ export function PlacesTable(props: PlacesTableProps) {
                             backgroundColor="#10222d"
                           >
                             <text fg={props.theme.muted}>
-                              Book {slot.startDate} {slot.startTime} {summary.source.tenant.timezone ?? "local"}?
+                              Book {slot.startDate} {slot.startTime} {slot.timeZoneLabel}?
                             </text>
                             <text
                               fg={
@@ -254,8 +293,9 @@ export function PlacesTable(props: PlacesTableProps) {
               </box>
             );
           }}
-        </For>
-      </Show>
-    </scrollbox>
+          </For>
+        </scrollbox>
+      </Match>
+    </Switch>
   );
 }

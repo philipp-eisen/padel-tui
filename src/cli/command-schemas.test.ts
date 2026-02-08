@@ -11,13 +11,13 @@ describe("CLI zod schemas", () => {
 
   test("validates availability date format", () => {
     expect(() =>
-      AvailabilitySearchInputSchema.parse({ query: "berlin", date: "2026/02/11" }),
+      AvailabilitySearchInputSchema.parse({ name: "berlin", date: "2026/02/11" }),
     ).toThrow();
   });
 
   test("accepts optional tenant filter for availability", () => {
     const parsed = AvailabilitySearchInputSchema.parse({
-      query: "berlin",
+      name: "berlin",
       tenantId: "16825678-053a-400d-b626-4c386d58706b",
     });
 

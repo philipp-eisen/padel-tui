@@ -100,7 +100,7 @@ export class AvailabilityService {
       );
     } else {
       if (!input.query || input.query.trim().length === 0) {
-        throw new Error("Search query is required when --near is not provided.");
+        throw new Error("Search term is required when location is not provided.");
       }
 
       tenants = await this.api.searchTenants(input.query, session);

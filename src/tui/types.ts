@@ -25,6 +25,7 @@ export interface BookableSlot {
 export interface SlotPreview {
   startDate: string;
   startTime: string;
+  timeZoneLabel: string;
   duration: number;
   price: string;
   courtName: string;

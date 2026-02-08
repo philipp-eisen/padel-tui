@@ -1,6 +1,6 @@
 import type { AppContext } from "../../app/context";
 import { z } from "zod";
-import { ask } from "../prompt";
+import { ask, askHidden } from "../prompt";
 
 export const AuthLoginOptionsSchema = z.object({
   email: z.string().email().optional(),
@@ -20,7 +20,7 @@ export async function runAuthLoginCommand(
     (await ask("Email: "));
   const password =
     parsed.password ??
-    (await ask("Password: "));
+    (await askHidden("Password: "));
 
   if (!email || !password) {
     throw new Error("Email and password are required.");
