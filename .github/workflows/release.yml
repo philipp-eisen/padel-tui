@@ -18,6 +18,10 @@ jobs:
   build:
     name: Build ${{ matrix.id }}
     runs-on: ${{ matrix.runner }}
+    env:
+      BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+      P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+      KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
     strategy:
       fail-fast: false
       matrix:
@@ -70,12 +74,12 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Import Apple code signing certificate
-        if: runner.os == 'macOS' && secrets.BUILD_CERTIFICATE_BASE64 != '' && secrets.P12_PASSWORD != '' && secrets.KEYCHAIN_PASSWORD != ''
+        if: runner.os == 'macOS' && env.BUILD_CERTIFICATE_BASE64 != '' && env.P12_PASSWORD != '' && env.KEYCHAIN_PASSWORD != ''
         uses: apple-actions/import-codesign-certs@v3
         with:
-          p12-file-base64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
-          p12-password: ${{ secrets.P12_PASSWORD }}
-          keychain-password: ${{ secrets.KEYCHAIN_PASSWORD }}
+          p12-file-base64: ${{ env.BUILD_CERTIFICATE_BASE64 }}
+          p12-password: ${{ env.P12_PASSWORD }}
+          keychain-password: ${{ env.KEYCHAIN_PASSWORD }}
 
       - name: Build executable
         run: bun run ${{ matrix.build_script }}
