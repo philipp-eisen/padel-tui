@@ -39,7 +39,7 @@ function targetToCorePackage(target?: string): string {
   }
 
   if (effectiveTarget.includes("windows-x64")) {
-    return "@opentui/core-windows-x64";
+    return "@opentui/core-win32-x64";
   }
 
   return `@opentui/core-${process.platform}-${process.arch}`;

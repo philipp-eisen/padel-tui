@@ -1,0 +1,176 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing git tag to release (for example: v1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.id }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: linux-x64
+            runner: ubuntu-latest
+            build_script: build:exe:linux-x64
+            dist_file: padel-tui-linux-x64
+            archive_ext: tar.gz
+          - id: linux-arm64
+            runner: ubuntu-24.04-arm
+            build_script: build:exe:linux-arm64
+            dist_file: padel-tui-linux-arm64
+            archive_ext: tar.gz
+          - id: windows-x64
+            runner: windows-latest
+            build_script: build:exe:windows-x64
+            dist_file: padel-tui-windows-x64.exe
+            archive_ext: zip
+          - id: darwin-arm64
+            runner: macos-14
+            build_script: build:exe:darwin-arm64
+            dist_file: padel-tui-darwin-arm64
+            archive_ext: tar.gz
+          - id: darwin-x64
+            runner: macos-13
+            build_script: build:exe:darwin-x64
+            dist_file: padel-tui-darwin-x64
+            archive_ext: tar.gz
+
+    steps:
+      - name: Resolve release tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "RELEASE_TAG=${{ inputs.tag }}" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_TAG=${{ github.ref_name }}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Import Apple code signing certificate
+        if: runner.os == 'macOS' && secrets.BUILD_CERTIFICATE_BASE64 != '' && secrets.P12_PASSWORD != '' && secrets.KEYCHAIN_PASSWORD != ''
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.P12_PASSWORD }}
+          keychain-password: ${{ secrets.KEYCHAIN_PASSWORD }}
+
+      - name: Build executable
+        run: bun run ${{ matrix.build_script }}
+        env:
+          PADEL_CODESIGN_IDENTITY: ${{ secrets.PADEL_CODESIGN_IDENTITY }}
+          PADEL_CODESIGN_ENTITLEMENTS: scripts/macos-entitlements.plist
+
+      - name: Package artifact (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          ASSET_NAME="padel-tui-${RELEASE_TAG}-${{ matrix.id }}.${{ matrix.archive_ext }}"
+          tar -czf "release-assets/${ASSET_NAME}" -C dist "${{ matrix.dist_file }}"
+
+      - name: Package artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          $assetName = "padel-tui-$env:RELEASE_TAG-${{ matrix.id }}.${{ matrix.archive_ext }}"
+          Compress-Archive -Path "dist/${{ matrix.dist_file }}" -DestinationPath "release-assets/$assetName" -Force
+
+      - name: Upload packaged artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: asset-${{ matrix.id }}
+          path: release-assets/*
+          if-no-files-found: error
+
+  checksums:
+    name: Generate checksums
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: asset-*
+          merge-multiple: true
+          path: release-assets
+
+      - name: Generate SHA256SUMS
+        shell: bash
+        run: |
+          cd release-assets
+          sha256sum *.tar.gz *.zip > SHA256SUMS
+
+      - name: Upload checksum artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksums
+          path: release-assets/SHA256SUMS
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    runs-on: ubuntu-latest
+    needs:
+      - build
+      - checksums
+
+    steps:
+      - name: Resolve release tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "RELEASE_TAG=${{ inputs.tag }}" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_TAG=${{ github.ref_name }}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: asset-*
+          merge-multiple: true
+          path: release-assets
+
+      - name: Download checksum artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: checksums
+          path: release-assets
+
+      - name: Create or update release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          else
+            gh release create "$RELEASE_TAG" release-assets/* \
+              --title "$RELEASE_TAG" \
+              --notes "Automated release for $RELEASE_TAG\n\nmacOS artifacts are ad-hoc signed unless PADEL_CODESIGN_IDENTITY is configured."
+          fi

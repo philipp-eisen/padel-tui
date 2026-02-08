@@ -38,7 +38,7 @@ bun run tui
   - `Enter` applies choice, `Esc` cancels.
 - Global: `Ctrl+L` logs out.
 
-## CLI (optional)
+## CLI
 
 ```bash
 # login (password prompt is hidden if --password is omitted)
