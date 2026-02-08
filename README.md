@@ -30,7 +30,7 @@ bun run tui
 
 ## Use Prebuilt Binaries
 
-Download the archive for your platform from GitHub Releases (currently Linux/macOS), extract it, then run:
+Download the archive for your platform from GitHub Releases (currently Linux + macOS arm64), extract it, then run:
 
 ```bash
 # macOS / Linux
