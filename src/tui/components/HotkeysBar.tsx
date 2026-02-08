@@ -19,7 +19,7 @@ export function HotkeysBar(props: HotkeysBarProps) {
           paddingRight={1}
           height={1}
           flexDirection="row"
-          justifyContent="space-between"
+          gap={2}
         >
           <text fg={props.theme.muted}>Left/Right choose</text>
           <text fg={props.theme.accent}>Enter apply</text>
@@ -34,7 +34,7 @@ export function HotkeysBar(props: HotkeysBarProps) {
           paddingRight={1}
           height={1}
           flexDirection="row"
-          justifyContent="space-between"
+          gap={2}
         >
           <text fg={props.theme.accentMuted}>Tab mode</text>
           <text fg={props.theme.muted}>Left/Right date</text>
@@ -50,7 +50,7 @@ export function HotkeysBar(props: HotkeysBarProps) {
           paddingRight={1}
           height={1}
           flexDirection="row"
-          justifyContent="space-between"
+          gap={2}
         >
           <text fg={props.theme.muted}>Up/Down select</text>
           <text fg={props.theme.warning}>Delete cancel</text>
@@ -66,7 +66,7 @@ export function HotkeysBar(props: HotkeysBarProps) {
           paddingRight={1}
           height={1}
           flexDirection="row"
-          justifyContent="space-between"
+          gap={2}
         >
           <text fg={props.theme.muted}>Up/Down navigate</text>
           <text fg={props.theme.accent}>

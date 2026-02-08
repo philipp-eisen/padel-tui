@@ -809,22 +809,6 @@ export function App(props: AppProps) {
               closeBookingPrompt();
               closeMatchesCancelPrompt();
             }}
-            onToggleMode={() => {
-              invalidatePendingSearch();
-              setSearchState((state) => ({
-                ...state,
-                mode: toggleSearchMode(state.mode),
-                loading: false,
-                results: [],
-                error: "",
-                expandedPlaceIndex: null,
-                selectedExpandedSlotIndex: 0,
-                pendingBookingPlaceIndex: null,
-                bookingMessage: "",
-              }));
-              closeBookingPrompt();
-              closeMatchesCancelPrompt();
-            }}
             onFocusMatches={() => {
               setSearchState((state) => ({ ...state, focusField: "matches" }));
             }}

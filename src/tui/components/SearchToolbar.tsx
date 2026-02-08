@@ -10,7 +10,6 @@ interface SearchToolbarProps {
   theme: TuiTheme;
   onTermInput: (value: string) => void;
   onFocusSearch: () => void;
-  onToggleMode: () => void;
 }
 
 export function SearchToolbar(props: SearchToolbarProps) {
@@ -25,10 +24,9 @@ export function SearchToolbar(props: SearchToolbarProps) {
       backgroundColor={props.theme.panelBg}
       padding={1}
       flexDirection="column"
-      gap={1}
       onMouseDown={props.onFocusSearch}
     >
-      <box flexDirection="row" justifyContent="space-between" alignItems="center">
+      <box flexDirection="row" justifyContent="space-between" alignItems="center" height={1}>
         <box flexDirection="row" alignItems="center" gap={1}>
           <text fg={props.theme.muted}>{fieldLabel()}:</text>
           <input
@@ -44,17 +42,13 @@ export function SearchToolbar(props: SearchToolbarProps) {
             cursorColor={props.theme.accent}
           />
         </box>
-        <text fg={props.focusField === "search" ? props.theme.accent : props.theme.muted}>
+        <box width={26} justifyContent="flex-end" overflow="hidden">
+          <text fg={props.focusField === "search" ? props.theme.accent : props.theme.muted}>
           ◁ {formatHumanDate(props.date)} ▷
-        </text>
+          </text>
+        </box>
       </box>
 
-      <box flexDirection="row" justifyContent="space-between" alignItems="center">
-        <text fg={props.theme.muted} onMouseDown={props.onToggleMode}>tab switches mode</text>
-        <text fg={props.focusField === "search" ? props.theme.accentMuted : props.theme.muted}>
-          arrow keys to change dates
-        </text>
-      </box>
     </box>
   );
 }

@@ -18,7 +18,6 @@ interface SearchScreenProps {
   matchesCancelPromptChoice: "reject" | "confirm";
   onTermInput: (value: string) => void;
   onFocusSearch: () => void;
-  onToggleMode: () => void;
   onFocusMatches: () => void;
   onSelectMatch: (index: number) => void;
   onFocusResults: () => void;
@@ -54,7 +53,6 @@ export function SearchScreen(props: SearchScreenProps) {
         theme={props.theme}
         onTermInput={props.onTermInput}
         onFocusSearch={props.onFocusSearch}
-        onToggleMode={props.onToggleMode}
       />
 
       <LoadingStrip loading={props.state.loading} theme={props.theme} />
