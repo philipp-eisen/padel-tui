@@ -36,18 +36,13 @@ jobs:
             build_script: build:exe:linux-arm64
             dist_file: padel-tui
             archive_ext: tar.gz
-          - id: windows-x64
-            runner: windows-latest
-            build_script: build:exe:windows-x64
-            dist_file: padel-tui.exe
-            archive_ext: zip
           - id: darwin-arm64
             runner: macos-14
             build_script: build:exe:darwin-arm64
             dist_file: padel-tui
             archive_ext: tar.gz
           - id: darwin-x64
-            runner: macos-13
+            runner: macos-14
             build_script: build:exe:darwin-x64
             dist_file: padel-tui
             archive_ext: tar.gz
@@ -127,7 +122,7 @@ jobs:
         shell: bash
         run: |
           cd release-assets
-          sha256sum *.tar.gz *.zip > SHA256SUMS
+          find . -maxdepth 1 -type f ! -name "SHA256SUMS" -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
 
       - name: Upload checksum artifact
         uses: actions/upload-artifact@v4

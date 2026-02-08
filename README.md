@@ -1,6 +1,6 @@
 # padel-tui
 
-TUI-first terminal app for searching and booking padel courts.
+TUI-first terminal app for searching and booking padel courts on Playtomic.
 
 ## What it does today
 
@@ -30,7 +30,7 @@ bun run tui
 
 ## Use Prebuilt Binaries
 
-Download the archive for your platform from GitHub Releases, extract it, then run:
+Download the archive for your platform from GitHub Releases (currently Linux/macOS), extract it, then run:
 
 ```bash
 # macOS / Linux
@@ -41,13 +41,6 @@ chmod +x padel-tui
 # CLI examples with binary
 ./padel-tui auth login --email you@example.com
 ./padel-tui search --near berlin --date 2026-02-11
-```
-
-Windows (PowerShell):
-
-```powershell
-Expand-Archive .\padel-tui-<version>-windows-x64.zip -DestinationPath .
-.\padel-tui.exe tui
 ```
 
 ## TUI Quick Guide
