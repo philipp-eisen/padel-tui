@@ -171,6 +171,7 @@ export function buildSlotPreview(result: TenantAvailability, limit?: number): Sl
   const allSlots = collectBookableSlots(result);
   const slots = typeof limit === "number" ? allSlots.slice(0, limit) : allSlots;
   return slots.map((slot) => ({
+    startDate: slot.startDate,
     startTime: slot.startTime,
     duration: slot.duration,
     price: slot.price,

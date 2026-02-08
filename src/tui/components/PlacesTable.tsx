@@ -25,6 +25,8 @@ interface PlacesTableProps {
   pendingBookingPlaceIndex: number | null;
   focusField: SearchFocusField;
   theme: TuiTheme;
+  bookingPromptOpen: boolean;
+  bookingPromptChoice: "reject" | "confirm";
   onFocusResults: () => void;
   onSelectPlace: (index: number) => void;
   onExpandPlace: (index: number) => void;
@@ -169,12 +171,14 @@ export function PlacesTable(props: PlacesTableProps) {
                       {(slot, slotIndex) => (
                         (() => {
                           const absoluteIndex = startIndex + slotIndex();
-                          const isSlotSelected = absoluteIndex === props.selectedExpandedSlotIndex;
+                          const isSlotSelected = () =>
+                            absoluteIndex === props.selectedExpandedSlotIndex;
 
                           return (
+                        <box flexDirection="column">
                         <box
                           flexDirection="row"
-                          backgroundColor={isSlotSelected ? "#0f2831" : "#0a181f"}
+                          backgroundColor={isSlotSelected() ? "#0f2831" : "#0a181f"}
                           onMouseDown={() => {
                             props.onFocusResults();
                             props.onSelectExpandedSlot(absoluteIndex);
@@ -182,14 +186,14 @@ export function PlacesTable(props: PlacesTableProps) {
                         >
                           <box width={SLOT_COL_MARKER}>
                             <text
-                              fg={isSlotSelected ? props.theme.accent : props.theme.muted}
+                              fg={isSlotSelected() ? props.theme.accent : props.theme.muted}
                             >
-                              {isSlotSelected ? ">" : " "}
+                              {isSlotSelected() ? ">" : " "}
                             </text>
                           </box>
                           <box width={SLOT_COL_TIME}>
                             <text
-                              fg={isSlotSelected ? props.theme.accent : props.theme.text}
+                              fg={isSlotSelected() ? props.theme.accent : props.theme.text}
                             >
                               {slot.startTime}
                             </text>
@@ -206,6 +210,37 @@ export function PlacesTable(props: PlacesTableProps) {
                           <box flexGrow={1} overflow="hidden">
                             <text fg={props.theme.text}>{slot.courtName}</text>
                           </box>
+                        </box>
+                        <Show when={props.bookingPromptOpen && isSlotSelected()}>
+                          <box
+                            flexDirection="row"
+                            paddingLeft={SLOT_COL_MARKER + 1}
+                            gap={1}
+                            backgroundColor="#10222d"
+                          >
+                            <text fg={props.theme.muted}>
+                              Book {slot.startDate} {slot.startTime} {summary.source.tenant.timezone ?? "local"}?
+                            </text>
+                            <text
+                              fg={
+                                props.bookingPromptChoice === "reject"
+                                  ? props.theme.accent
+                                  : props.theme.muted
+                              }
+                            >
+                              [No]
+                            </text>
+                            <text
+                              fg={
+                                props.bookingPromptChoice === "confirm"
+                                  ? props.theme.warning
+                                  : props.theme.muted
+                              }
+                            >
+                              [Yes]
+                            </text>
+                          </box>
+                        </Show>
                         </box>
                           );
                         })()

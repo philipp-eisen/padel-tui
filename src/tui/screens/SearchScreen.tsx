@@ -11,6 +11,7 @@ interface SearchScreenProps {
   summaries: PlaceSummary[];
   theme: TuiTheme;
   bookingPromptOpen: boolean;
+  bookingPromptChoice: "reject" | "confirm";
   onTermInput: (value: string) => void;
   onFocusSearch: () => void;
   onToggleMode: () => void;
@@ -44,6 +45,8 @@ export function SearchScreen(props: SearchScreenProps) {
         pendingBookingPlaceIndex={props.state.pendingBookingPlaceIndex}
         focusField={props.state.focusField}
         theme={props.theme}
+        bookingPromptOpen={props.bookingPromptOpen}
+        bookingPromptChoice={props.bookingPromptChoice}
         onFocusResults={props.onFocusResults}
         onSelectPlace={props.onSelectPlace}
         onExpandPlace={props.onExpandPlace}

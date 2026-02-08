@@ -3,7 +3,6 @@ import { useKeyboard } from "@opentui/solid";
 import type { AppContext } from "../app/context";
 import type { Session } from "../domain/types";
 import { formatErrorMessage } from "../errors/format-error";
-import { BookingConfirmModal, type BookingPromptChoice } from "./components/BookingConfirmModal";
 import type {
   LoginFormState,
   SearchMode,
@@ -29,6 +28,8 @@ interface AppProps {
 function toggleSearchMode(mode: SearchMode): SearchMode {
   return mode === "location" ? "name" : "location";
 }
+
+type BookingPromptChoice = "reject" | "confirm";
 
 export function App(props: AppProps) {
   const [mode, setMode] = createSignal<ViewMode>("loading");
@@ -56,7 +57,6 @@ export function App(props: AppProps) {
   });
   const [bookingPromptOpen, setBookingPromptOpen] = createSignal(false);
   const [bookingPromptChoice, setBookingPromptChoice] = createSignal<BookingPromptChoice>("reject");
-  const [bookingPromptSlot, setBookingPromptSlot] = createSignal<BookableSlot | null>(null);
 
   const placeSummaries = createMemo(() => summarizeAvailablePlaces(searchState().results));
 
@@ -159,8 +159,7 @@ export function App(props: AppProps) {
     await runSearch(search.term, search.mode, search.date);
   }
 
-  function openBookingPromptFor(slot: BookableSlot): void {
-    setBookingPromptSlot(slot);
+  function openBookingPrompt(): void {
     setBookingPromptChoice("reject");
     setBookingPromptOpen(true);
   }
@@ -168,7 +167,21 @@ export function App(props: AppProps) {
   function closeBookingPrompt(): void {
     setBookingPromptOpen(false);
     setBookingPromptChoice("reject");
-    setBookingPromptSlot(null);
+  }
+
+  function getSelectedSlotForBooking(): BookableSlot | null {
+    const search = searchState();
+    const summaries = placeSummaries();
+    const selectedSummary = summaries[search.selectedPlaceIndex];
+    if (!selectedSummary) {
+      return null;
+    }
+
+    if (search.expandedPlaceIndex !== search.selectedPlaceIndex) {
+      return null;
+    }
+
+    return pickBookableSlotByIndex(selectedSummary.source, search.selectedExpandedSlotIndex);
   }
 
   async function handleBookSelected(slot: BookableSlot): Promise<void> {
@@ -263,8 +276,12 @@ export function App(props: AppProps) {
       }
 
       if (isSubmitKey) {
-        const selectedSlot = bookingPromptSlot();
+        if (key.eventType === "repeat") {
+          return;
+        }
+
         const selectedChoice = bookingPromptChoice();
+        const selectedSlot = getSelectedSlotForBooking();
         closeBookingPrompt();
 
         if (selectedChoice === "confirm" && selectedSlot) {
@@ -351,6 +368,7 @@ export function App(props: AppProps) {
             ),
             pendingBookingPlaceIndex: null,
           }));
+          closeBookingPrompt();
           return;
         }
 
@@ -361,6 +379,7 @@ export function App(props: AppProps) {
           selectedExpandedSlotIndex: 0,
           pendingBookingPlaceIndex: null,
         }));
+        closeBookingPrompt();
         return;
       }
 
@@ -370,22 +389,25 @@ export function App(props: AppProps) {
             setSearchState((state) => ({
               ...state,
               expandedPlaceIndex: null,
-              selectedExpandedSlotIndex: 0,
-              pendingBookingPlaceIndex: null,
-            }));
-            return;
-          }
+            selectedExpandedSlotIndex: 0,
+            pendingBookingPlaceIndex: null,
+          }));
+          closeBookingPrompt();
+          return;
+        }
 
           setSearchState((state) => ({
             ...state,
             selectedExpandedSlotIndex: Math.max(state.selectedExpandedSlotIndex - 1, 0),
             pendingBookingPlaceIndex: null,
           }));
+          closeBookingPrompt();
           return;
         }
 
         if (search.selectedPlaceIndex === 0) {
           setSearchState((state) => ({ ...state, focusField: "search" }));
+          closeBookingPrompt();
           return;
         }
 
@@ -396,22 +418,21 @@ export function App(props: AppProps) {
           selectedExpandedSlotIndex: 0,
           pendingBookingPlaceIndex: null,
         }));
+        closeBookingPrompt();
         return;
       }
 
       if (isSubmitKey || key.name === "right") {
+        if (isSubmitKey && key.eventType === "repeat") {
+          return;
+        }
+
         if (summaries.length === 0) {
           return;
         }
 
         if (isSubmitKey && expandedSlots.length > 0 && expandedSummary) {
-          const selectedSlot = pickBookableSlotByIndex(
-            expandedSummary.source,
-            search.selectedExpandedSlotIndex,
-          );
-          if (selectedSlot) {
-            openBookingPromptFor(selectedSlot);
-          }
+          openBookingPrompt();
           return;
         }
 
@@ -421,6 +442,7 @@ export function App(props: AppProps) {
           selectedExpandedSlotIndex: 0,
           error: "",
         }));
+        closeBookingPrompt();
         return;
       }
 
@@ -430,6 +452,7 @@ export function App(props: AppProps) {
           expandedPlaceIndex: null,
           selectedExpandedSlotIndex: 0,
         }));
+        closeBookingPrompt();
         return;
       }
     }
@@ -443,6 +466,7 @@ export function App(props: AppProps) {
         pendingBookingPlaceIndex: null,
         bookingMessage: "",
       }));
+      closeBookingPrompt();
     }
   });
 
@@ -452,6 +476,7 @@ export function App(props: AppProps) {
       flexGrow={1}
       width="100%"
       height="100%"
+      position="relative"
       backgroundColor={theme.appBg}
     >
       <Show when={mode() === "loading"}>
@@ -482,6 +507,7 @@ export function App(props: AppProps) {
             summaries={placeSummaries()}
             theme={theme}
             bookingPromptOpen={bookingPromptOpen()}
+            bookingPromptChoice={bookingPromptChoice()}
             onTermInput={(value: string) => {
               setSearchState((state) => ({
                 ...state,
@@ -492,9 +518,11 @@ export function App(props: AppProps) {
                 pendingBookingPlaceIndex: null,
                 bookingMessage: "",
               }));
+              closeBookingPrompt();
             }}
             onFocusSearch={() => {
               setSearchState((state) => ({ ...state, focusField: "search" }));
+              closeBookingPrompt();
             }}
             onToggleMode={() => {
               setSearchState((state) => ({
@@ -506,6 +534,7 @@ export function App(props: AppProps) {
                 pendingBookingPlaceIndex: null,
                 bookingMessage: "",
               }));
+              closeBookingPrompt();
             }}
             onFocusResults={() => {
               setSearchState((state) => ({ ...state, focusField: "results" }));
@@ -517,6 +546,7 @@ export function App(props: AppProps) {
                 selectedPlaceIndex: index,
                 pendingBookingPlaceIndex: null,
               }));
+              closeBookingPrompt();
             }}
             onExpandPlace={(index: number) => {
               setSearchState((state) => ({
@@ -527,6 +557,7 @@ export function App(props: AppProps) {
                 selectedExpandedSlotIndex: 0,
                 pendingBookingPlaceIndex: null,
               }));
+              closeBookingPrompt();
             }}
             onSelectExpandedSlot={(slotIndex: number) => {
               setSearchState((state) => ({
@@ -535,23 +566,7 @@ export function App(props: AppProps) {
                 selectedExpandedSlotIndex: slotIndex,
                 pendingBookingPlaceIndex: null,
               }));
-            }}
-          />
-          <BookingConfirmModal
-            open={bookingPromptOpen()}
-            slot={bookingPromptSlot()}
-            choice={bookingPromptChoice()}
-            theme={theme}
-            onChooseReject={() => {
-              setBookingPromptChoice("reject");
               closeBookingPrompt();
-            }}
-            onChooseConfirm={() => {
-              const slot = bookingPromptSlot();
-              closeBookingPrompt();
-              if (slot) {
-                void handleBookSelected(slot);
-              }
             }}
           />
         </box>
