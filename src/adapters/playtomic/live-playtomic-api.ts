@@ -6,6 +6,8 @@ import type {
   AvailabilitySlot,
   CreatePaymentIntentInput,
   Credentials,
+  MatchListInput,
+  MatchSummary,
   PaymentIntent,
   PaymentMethod,
   Session,
@@ -13,6 +15,7 @@ import type {
   TenantResource,
   UpdatePaymentIntentInput,
 } from "../../domain/types";
+import { buildMatchShareLink, extractShareLinkFromUnknown } from "../../services/match-utils";
 import { PlaytomicApiError } from "./errors";
 import type { AvailabilityQuery, PlaytomicApi, TenantLocationQuery } from "./playtomic-api";
 
@@ -86,6 +89,46 @@ const PaymentIntentResponseSchema = z.object({
     )
     .optional(),
 });
+
+const MatchResponseSchema = z
+  .object({
+    match_id: z.string().min(1),
+    status: z.string().optional(),
+    game_status: z.string().optional(),
+    start_date: z.string().min(1),
+    end_date: z.string().min(1),
+    location: z.string().optional(),
+    resource_name: z.string().optional(),
+    owner_id: z.string().optional(),
+    teams: z
+      .array(
+        z.object({
+          team_id: z.string().optional(),
+          min_players: z.number().int().positive().optional(),
+          max_players: z.number().int().positive().optional(),
+          players: z
+            .array(
+              z.object({
+                user_id: z.string().optional(),
+                name: z.string().optional(),
+              }),
+            )
+            .optional(),
+        }),
+      )
+      .optional(),
+    tenant: z
+      .object({
+        tenant_name: z.string().optional(),
+        address: z
+          .object({
+            timezone: z.string().optional(),
+          })
+          .optional(),
+      })
+      .optional(),
+  })
+  .passthrough();
 
 const DEFAULT_ALLOWED_PAYMENT_METHOD_TYPES = [
   "DIRECT",
@@ -195,6 +238,41 @@ function mapTenant(tenant: z.infer<typeof TenantResponseSchema>): Tenant {
   };
 }
 
+function mapMatchSummary(match: z.infer<typeof MatchResponseSchema>): MatchSummary {
+  const teams = match.teams ?? [];
+  const joinedPlayers = teams.reduce((count, team) => count + (team.players?.length ?? 0), 0);
+  const totalPlayers = teams.reduce((count, team) => count + (team.max_players ?? 0), 0);
+
+  const normalizedStatus =
+    match.status === "PENDING" ||
+    match.status === "IN_PROGRESS" ||
+    match.status === "PLAYED" ||
+    match.status === "VALIDATING" ||
+    match.status === "CONFIRMED" ||
+    match.status === "REJECTED" ||
+    match.status === "EXPIRED" ||
+    match.status === "CANCELED"
+      ? match.status
+      : "UNKNOWN";
+
+  return {
+    matchId: match.match_id,
+    status: normalizedStatus,
+    gameStatus: match.game_status ?? normalizedStatus,
+    startDate: match.start_date,
+    endDate: match.end_date,
+    location: match.location ?? "Unknown",
+    resourceName: match.resource_name ?? "Unknown",
+    tenantName: match.tenant?.tenant_name ?? match.location ?? "Unknown",
+    timezone: match.tenant?.address?.timezone,
+    ownerId: match.owner_id,
+    joinedPlayers,
+    totalPlayers,
+    shareLink: extractShareLinkFromUnknown(match) ?? buildMatchShareLink(match.match_id),
+    raw: match,
+  };
+}
+
 export class LivePlaytomicApi implements PlaytomicApi {
   private readonly apiClient: KyInstance;
   private readonly refreshClient: KyInstance;
@@ -273,6 +351,53 @@ export class LivePlaytomicApi implements PlaytomicApi {
     );
 
     return tenants.map(mapTenant);
+  }
+
+  async listMatches(input: MatchListInput, session: Session): Promise<MatchSummary[]> {
+    const payload = await this.requestJson(this.apiClient, {
+      method: "GET",
+      path: "/v1/matches",
+      query: {
+        after_end_date: input.afterEndDate,
+        before_end_date: input.beforeEndDate,
+        disable_price_calculation: "true",
+        exclude_join_requests_where_match_is_played: "true",
+        join_request_status: "PENDING,APPROVED,REJECTED",
+        match_status: input.matchStatus.join(","),
+        size: String(input.size ?? 20),
+        sort: "start_date,created_at,ASC",
+        user_id: input.userId ?? "me",
+      },
+      session,
+    });
+
+    const response = parseWithSchema(z.array(MatchResponseSchema), payload, "matches list");
+    return response.map(mapMatchSummary);
+  }
+
+  async getMatch(matchId: string, session: Session): Promise<MatchSummary> {
+    const payload = await this.requestJson(this.apiClient, {
+      method: "GET",
+      path: `/v1/matches/${matchId}`,
+      session,
+    });
+
+    const response = parseWithSchema(MatchResponseSchema, payload, "match detail");
+    return mapMatchSummary(response);
+  }
+
+  async cancelMatch(matchId: string, reasonCode: string, session: Session): Promise<MatchSummary> {
+    const payload = await this.requestJson(this.apiClient, {
+      method: "POST",
+      path: `/v1/matches/${matchId}/cancellation`,
+      body: {
+        cancellation_reason_code: reasonCode,
+      },
+      session,
+    });
+
+    const response = parseWithSchema(MatchResponseSchema, payload, "match cancellation");
+    return mapMatchSummary(response);
   }
 
   private async fetchTenantsPaginated(

@@ -1,6 +1,6 @@
-import type { TenantAvailability } from "../domain/types";
+import type { MatchSummary, TenantAvailability } from "../domain/types";
 
-export type ViewMode = "loading" | "login" | "search";
+export type ViewMode = "loading" | "login" | "search" | "matches";
 export type SearchMode = "location" | "name";
 export type SearchFocusField = "search" | "results";
 
@@ -25,4 +25,13 @@ export interface SearchState {
   bookingMessage: string;
   error: string;
   results: TenantAvailability[];
+}
+
+export interface MatchesState {
+  loading: boolean;
+  matches: MatchSummary[];
+  selectedIndex: number;
+  pendingCancelMatchId: string | null;
+  message: string;
+  error: string;
 }

@@ -1,5 +1,6 @@
 import type { AppContext } from "../../app/context";
 import { z } from "zod";
+import { extractMatchIdFromUnknown, extractShareLinkFromUnknown } from "../../services/match-utils";
 
 export const PurchaseInputSchema = z.object({
   tenantId: z.string().trim().min(1),
@@ -29,6 +30,21 @@ export async function runPaymentPurchaseCommand(
     }),
   );
 
+  let shareLink = extractShareLinkFromUnknown(result.final.raw);
+  if (!shareLink) {
+    const matchId = extractMatchIdFromUnknown(result.final.raw);
+    if (matchId) {
+      try {
+        const match = await app.authService.runWithValidSession((session) =>
+          app.matchService.getMatch(session, matchId),
+        );
+        shareLink = match.shareLink;
+      } catch {
+        // Ignore match detail fetch failures.
+      }
+    }
+  }
+
   console.log(`Created payment intent: ${result.created.paymentIntentId}`);
   console.log(`Status after method selection: ${result.selected.status}`);
   if (result.confirmed) {
@@ -43,4 +59,7 @@ export async function runPaymentPurchaseCommand(
   }
 
   console.log(`Payment succeeded. payment_id=${result.final.paymentId ?? "unknown"}`);
+  if (shareLink) {
+    console.log(`Match share link: ${shareLink}`);
+  }
 }

@@ -6,6 +6,8 @@ TUI-first terminal app for searching and booking padel courts on Playtomic.
 
 - Search availabilities (TUI + CLI)
 - Book available slots (TUI + CLI)
+- List active matches (TUI + CLI)
+- Cancel active matches (TUI + CLI)
 
 ## Planned next
 
@@ -62,6 +64,10 @@ chmod +x padel-tui
   - `Left/Right` toggles `No`/`Yes`.
   - `Enter` applies choice, `Esc` cancels.
 - Global: `Ctrl+L` logs out.
+- Matches view:
+  - Press `M` in search view to open active matches.
+  - `R` refreshes, `C` then `C` cancels selected match.
+  - `Esc` returns to search.
 
 ## CLI (from source)
 
@@ -75,6 +81,12 @@ bun run cli auth logout
 # search (requires either --near or --name)
 bun run cli search --near berlin --date 2026-02-11
 bun run cli search --name "Berlin venue" --date 2026-02-11
+
+# list active matches
+bun run cli matches --size 30
+
+# cancel a match
+bun run cli match-cancel --match-id <match-id>
 
 # book
 bun run cli book --tenant-id <tenant-id> --resource-id <resource-id> --start 2026-02-16T21:00:00 --duration 60 --players 4

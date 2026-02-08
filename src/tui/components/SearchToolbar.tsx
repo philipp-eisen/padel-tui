@@ -52,7 +52,7 @@ export function SearchToolbar(props: SearchToolbarProps) {
       <box flexDirection="row" justifyContent="space-between" alignItems="center">
         <text fg={props.theme.muted} onMouseDown={props.onToggleMode}>tab switches mode</text>
         <text fg={props.focusField === "search" ? props.theme.accentMuted : props.theme.muted}>
-          arrow keys to change dates
+          arrow keys to change dates | M active matches
         </text>
       </box>
     </box>

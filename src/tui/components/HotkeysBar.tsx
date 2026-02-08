@@ -40,6 +40,7 @@ export function HotkeysBar(props: HotkeysBarProps) {
           <text fg={props.theme.muted}>Left/Right date</text>
           <text fg={props.theme.accent}>Enter search</text>
           <text fg={props.theme.muted}>Down list</text>
+          <text fg={props.theme.accentMuted}>M matches</text>
           <text fg={props.theme.muted}>Ctrl+L logout</text>
         </box>
       </Match>

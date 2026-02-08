@@ -52,6 +52,42 @@ export interface AvailabilitySearchInput {
   maxTenants?: number;
 }
 
+export type MatchStatus =
+  | "PENDING"
+  | "IN_PROGRESS"
+  | "PLAYED"
+  | "VALIDATING"
+  | "CONFIRMED"
+  | "REJECTED"
+  | "EXPIRED"
+  | "CANCELED"
+  | "UNKNOWN";
+
+export interface MatchSummary {
+  matchId: string;
+  status: MatchStatus;
+  gameStatus: string;
+  startDate: string;
+  endDate: string;
+  location: string;
+  resourceName: string;
+  tenantName: string;
+  timezone?: string;
+  ownerId?: string;
+  joinedPlayers: number;
+  totalPlayers: number;
+  shareLink?: string;
+  raw: unknown;
+}
+
+export interface MatchListInput {
+  afterEndDate: string;
+  beforeEndDate: string;
+  matchStatus: string[];
+  size?: number;
+  userId?: string;
+}
+
 export interface PaymentMethod {
   paymentMethodId: string;
   methodType: string;

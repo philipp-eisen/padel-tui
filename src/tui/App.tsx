@@ -5,12 +5,14 @@ import type { Session } from "../domain/types";
 import { formatErrorMessage } from "../errors/format-error";
 import type {
   LoginFormState,
+  MatchesState,
   SearchMode,
   SearchState,
   ViewMode,
 } from "./state";
 import type { BookableSlot } from "./types";
 import { LoginScreen } from "./screens/LoginScreen";
+import { MatchesScreen } from "./screens/MatchesScreen";
 import { SearchScreen } from "./screens/SearchScreen";
 import { theme } from "./theme";
 import {
@@ -20,6 +22,7 @@ import {
   summarizeAvailablePlaces,
   todayIsoDate,
 } from "./utils";
+import { extractMatchIdFromUnknown, extractShareLinkFromUnknown } from "../services/match-utils";
 
 interface AppProps {
   app: AppContext;
@@ -31,6 +34,7 @@ function toggleSearchMode(mode: SearchMode): SearchMode {
 
 type BookingPromptChoice = "reject" | "confirm";
 const TUI_MAX_TENANTS = 30;
+const TUI_MATCHES_LIMIT = 40;
 
 export function App(props: AppProps) {
   let latestSearchRequestId = 0;
@@ -57,6 +61,14 @@ export function App(props: AppProps) {
     bookingMessage: "",
     error: "",
     results: [],
+  });
+  const [matchesState, setMatchesState] = createSignal<MatchesState>({
+    loading: false,
+    matches: [],
+    selectedIndex: 0,
+    pendingCancelMatchId: null,
+    message: "",
+    error: "",
   });
   const [bookingPromptOpen, setBookingPromptOpen] = createSignal(false);
   const [bookingPromptChoice, setBookingPromptChoice] = createSignal<BookingPromptChoice>("reject");
@@ -181,6 +193,76 @@ export function App(props: AppProps) {
     await runSearch(search.term, search.mode, search.date);
   }
 
+  async function loadMatches(): Promise<void> {
+    setMatchesState((state) => ({
+      ...state,
+      loading: true,
+      message: "",
+      error: "",
+      pendingCancelMatchId: null,
+    }));
+
+    try {
+      const matches = await props.app.authService.runWithValidSession((session) => {
+        setSession(session);
+        return props.app.matchService.listActiveMatches(session, TUI_MATCHES_LIMIT);
+      });
+
+      setMatchesState((state) => ({
+        ...state,
+        loading: false,
+        matches,
+        selectedIndex: Math.min(state.selectedIndex, Math.max(0, matches.length - 1)),
+      }));
+    } catch (error) {
+      const message = formatErrorMessage(error);
+      if (message.includes("No active session")) {
+        setMode("login");
+      }
+
+      setMatchesState((state) => ({
+        ...state,
+        loading: false,
+        error: message,
+      }));
+    }
+  }
+
+  async function cancelSelectedMatch(): Promise<void> {
+    const current = matchesState();
+    const selected = current.matches[current.selectedIndex];
+    if (!selected) {
+      setMatchesState((state) => ({ ...state, error: "No match selected." }));
+      return;
+    }
+
+    try {
+      const canceled = await props.app.authService.runWithValidSession((session) => {
+        setSession(session);
+        return props.app.matchService.cancelMatch(session, selected.matchId);
+      });
+
+      setMatchesState((state) => ({
+        ...state,
+        pendingCancelMatchId: null,
+        message: `Canceled ${canceled.startDate} at ${canceled.tenantName}.`,
+        error: "",
+      }));
+      await loadMatches();
+    } catch (error) {
+      setMatchesState((state) => ({
+        ...state,
+        pendingCancelMatchId: null,
+        error: formatErrorMessage(error),
+      }));
+    }
+  }
+
+  function openMatchesView(): void {
+    setMode("matches");
+    void loadMatches();
+  }
+
   function openBookingPrompt(): void {
     setBookingPromptChoice("reject");
     setBookingPromptOpen(true);
@@ -224,15 +306,30 @@ export function App(props: AppProps) {
     }));
 
     try {
-      const result = await props.app.authService.runWithValidSession((validSession) => {
+      const bookingOutcome = await props.app.authService.runWithValidSession(async (validSession) => {
         setSession(validSession);
-        return props.app.purchaseService.purchaseSlot(validSession, {
+        const result = await props.app.purchaseService.purchaseSlot(validSession, {
           tenantId: slot.tenantId,
           resourceId: slot.resourceId,
           start: `${slot.startDate}T${slot.startTime}`,
           duration: slot.duration,
           numberOfPlayers: 4,
         });
+
+        let shareLink = extractShareLinkFromUnknown(result.final.raw);
+        if (!shareLink) {
+          const matchId = extractMatchIdFromUnknown(result.final.raw);
+          if (matchId) {
+            try {
+              const match = await props.app.matchService.getMatch(validSession, matchId);
+              shareLink = match.shareLink;
+            } catch {
+              // Ignore match detail errors and keep booking success path.
+            }
+          }
+        }
+
+        return { result, shareLink };
       });
 
       setSearchState((state) => ({
@@ -241,7 +338,8 @@ export function App(props: AppProps) {
         pendingBookingPlaceIndex: null,
         bookingMessage:
           `Booked ${slot.tenantName} ${slot.startTime} (${slot.price})` +
-          ` payment_id=${result.final.paymentId ?? "unknown"}`,
+          ` payment_id=${bookingOutcome.result.final.paymentId ?? "unknown"}` +
+          (bookingOutcome.shareLink ? ` share=${bookingOutcome.shareLink}` : ""),
       }));
     } catch (error) {
       setSearchState((state) => ({
@@ -271,6 +369,72 @@ export function App(props: AppProps) {
       if (isSubmitKey || (key.ctrl && key.name === "s")) {
         void handleLogin();
       }
+      return;
+    }
+
+    if (mode() === "matches") {
+      if (key.ctrl && key.name === "l") {
+        void handleLogout();
+        return;
+      }
+
+      if (key.name === "escape" || key.name === "m") {
+        setMode("search");
+        return;
+      }
+
+      if (key.name === "r") {
+        void loadMatches();
+        return;
+      }
+
+      const state = matchesState();
+      const selectedMatch = state.matches[state.selectedIndex];
+
+      if ((key.name === "down" || key.name === "j") && state.matches.length > 0) {
+        setMatchesState((prev) => ({
+          ...prev,
+          selectedIndex: Math.min(prev.selectedIndex + 1, prev.matches.length - 1),
+          pendingCancelMatchId: null,
+          message: "",
+          error: "",
+        }));
+        return;
+      }
+
+      if ((key.name === "up" || key.name === "k") && state.matches.length > 0) {
+        setMatchesState((prev) => ({
+          ...prev,
+          selectedIndex: Math.max(prev.selectedIndex - 1, 0),
+          pendingCancelMatchId: null,
+          message: "",
+          error: "",
+        }));
+        return;
+      }
+
+      if ((key.name === "c" || key.name === "x") && selectedMatch && !state.loading) {
+        if (state.pendingCancelMatchId === selectedMatch.matchId) {
+          void cancelSelectedMatch();
+        } else {
+          setMatchesState((prev) => ({
+            ...prev,
+            pendingCancelMatchId: selectedMatch.matchId,
+            error: "",
+            message: `Press C again to cancel ${selectedMatch.startDate} at ${selectedMatch.tenantName}.`,
+          }));
+        }
+        return;
+      }
+
+      if (isSubmitKey && selectedMatch?.shareLink) {
+        setMatchesState((prev) => ({
+          ...prev,
+          message: `Share: ${selectedMatch.shareLink}`,
+          error: "",
+        }));
+      }
+
       return;
     }
 
@@ -322,6 +486,11 @@ export function App(props: AppProps) {
 
     if (key.ctrl && key.name === "l") {
       void handleLogout();
+      return;
+    }
+
+    if (key.name === "m") {
+      openMatchesView();
       return;
     }
 
@@ -602,6 +771,22 @@ export function App(props: AppProps) {
             }}
           />
         </box>
+      </Show>
+
+      <Show when={mode() === "matches"}>
+        <MatchesScreen
+          state={matchesState()}
+          theme={theme}
+          onSelectMatch={(index: number) => {
+            setMatchesState((state) => ({
+              ...state,
+              selectedIndex: index,
+              pendingCancelMatchId: null,
+              message: "",
+              error: "",
+            }));
+          }}
+        />
       </Show>
     </box>
   );

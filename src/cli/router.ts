@@ -5,6 +5,7 @@ import {
   registerAvailabilityCommands,
   printAvailabilityUsage,
 } from "./commands/availability-command";
+import { printMatchesUsage, registerMatchCommands } from "./commands/matches-command";
 import { registerPaymentCommands, printPaymentUsage } from "./commands/payment-command";
 
 function printGroupUsage(argv: string[]): boolean {
@@ -27,6 +28,11 @@ function printGroupUsage(argv: string[]): boolean {
     return true;
   }
 
+  if (argv[0] === "matches" && argv[1] === "help") {
+    printMatchesUsage();
+    return true;
+  }
+
   return false;
 }
 
@@ -41,6 +47,7 @@ export async function runCli(app: AppContext, argv: string[]): Promise<void> {
   cli.help();
   registerAuthCommands(cli, app);
   registerAvailabilityCommands(cli, app);
+  registerMatchCommands(cli, app);
   registerPaymentCommands(cli, app);
 
   cli.on("command:*", () => {
