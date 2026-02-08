@@ -1,85 +1,38 @@
-import { For, Show, createSignal, onMount } from "solid-js";
+import { Show, createMemo, createSignal, onMount } from "solid-js";
 import { useKeyboard } from "@opentui/solid";
 import type { AppContext } from "../app/context";
 import type { Session } from "../domain/types";
 import { formatErrorMessage } from "../errors/format-error";
-import type { LoginFormState, SearchState, ViewMode } from "./state";
+import { BookingConfirmModal, type BookingPromptChoice } from "./components/BookingConfirmModal";
+import type {
+  LoginFormState,
+  SearchMode,
+  SearchState,
+  ViewMode,
+} from "./state";
+import type { BookableSlot } from "./types";
+import { LoginScreen } from "./screens/LoginScreen";
+import { SearchScreen } from "./screens/SearchScreen";
+import { theme } from "./theme";
+import {
+  collectBookableSlots,
+  pickBookableSlotByIndex,
+  shiftIsoDateByDays,
+  summarizeAvailablePlaces,
+  todayIsoDate,
+} from "./utils";
 
 interface AppProps {
   app: AppContext;
 }
 
-function todayIsoDate(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = `${now.getMonth() + 1}`.padStart(2, "0");
-  const day = `${now.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function shiftIsoDateByDays(input: string, deltaDays: number): string {
-  const parsed = new Date(input);
-  if (Number.isNaN(parsed.getTime())) {
-    return input;
-  }
-
-  parsed.setDate(parsed.getDate() + deltaDays);
-  const year = parsed.getFullYear();
-  const month = `${parsed.getMonth() + 1}`.padStart(2, "0");
-  const day = `${parsed.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-interface BookableSlot {
-  tenantName: string;
-  tenantId: string;
-  resourceId: string;
-  startDate: string;
-  startTime: string;
-  duration: number;
-  price: string;
-}
-
-function collectBookableSlots(search: SearchState): BookableSlot[] {
-  const slots: BookableSlot[] = [];
-
-  for (const tenantResult of search.results) {
-    for (const resource of tenantResult.resources) {
-      for (const slot of resource.slots) {
-        slots.push({
-          tenantName: tenantResult.tenant.tenantName,
-          tenantId: tenantResult.tenant.tenantId,
-          resourceId: resource.resourceId,
-          startDate: resource.startDate,
-          startTime: slot.startTime,
-          duration: slot.duration,
-          price: slot.price,
-        });
-      }
-    }
-  }
-
-  return slots;
+function toggleSearchMode(mode: SearchMode): SearchMode {
+  return mode === "location" ? "name" : "location";
 }
 
 export function App(props: AppProps) {
-  const theme = {
-    appBg: "#0b1020",
-    panelBg: "#111827",
-    panelBorder: "#334155",
-    text: "#e5e7eb",
-    muted: "#93a4b8",
-    accent: "#7dd3fc",
-    inputBg: "#0f172a",
-    inputFocusedBg: "#1e293b",
-    inputText: "#f8fafc",
-    inputPlaceholder: "#64748b",
-    error: "#fca5a5",
-    success: "#86efac",
-  };
-
   const [mode, setMode] = createSignal<ViewMode>("loading");
-  const [session, setSession] = createSignal<Session | null>(null);
+  const [, setSession] = createSignal<Session | null>(null);
   const [loginState, setLoginState] = createSignal<LoginFormState>({
     email: "",
     password: "",
@@ -87,19 +40,25 @@ export function App(props: AppProps) {
     error: "",
   });
   const [searchState, setSearchState] = createSignal<SearchState>({
-    query: "berlin",
-    near: "",
-    tenantId: "",
+    term: "",
+    mode: "location",
     date: todayIsoDate(),
-    focusField: "query",
+    focusField: "search",
     loading: false,
     booking: false,
-    selectedSlotIndex: 0,
-    pendingBookingSlotIndex: null,
+    selectedPlaceIndex: 0,
+    expandedPlaceIndex: null,
+    selectedExpandedSlotIndex: 0,
+    pendingBookingPlaceIndex: null,
     bookingMessage: "",
     error: "",
     results: [],
   });
+  const [bookingPromptOpen, setBookingPromptOpen] = createSignal(false);
+  const [bookingPromptChoice, setBookingPromptChoice] = createSignal<BookingPromptChoice>("reject");
+  const [bookingPromptSlot, setBookingPromptSlot] = createSignal<BookableSlot | null>(null);
+
+  const placeSummaries = createMemo(() => summarizeAvailablePlaces(searchState().results));
 
   onMount(async () => {
     try {
@@ -150,16 +109,12 @@ export function App(props: AppProps) {
     }
   }
 
-  async function runSearch(
-    query: string,
-    near: string,
-    date: string,
-    tenantId: string,
-  ): Promise<void> {
-    if (!query.trim() && !near.trim()) {
+  async function runSearch(term: string, searchMode: SearchMode, date: string): Promise<void> {
+    const trimmedTerm = term.trim();
+    if (!trimmedTerm) {
       setSearchState((state) => ({
         ...state,
-        error: "Enter a query or a near location.",
+        error: "Enter a location or place name.",
       }));
       return;
     }
@@ -169,9 +124,8 @@ export function App(props: AppProps) {
       const results = await props.app.authService.runWithValidSession((validSession) => {
         setSession(validSession);
         return props.app.availabilityService.search(validSession, {
-          query: query.trim() || undefined,
-          near: near.trim() || undefined,
-          tenantId: tenantId.trim() || undefined,
+          query: searchMode === "name" ? trimmedTerm : undefined,
+          near: searchMode === "location" ? trimmedTerm : undefined,
           date,
         });
       });
@@ -179,8 +133,11 @@ export function App(props: AppProps) {
       setSearchState((state) => ({
         ...state,
         loading: false,
-        selectedSlotIndex: 0,
-        pendingBookingSlotIndex: null,
+        focusField: "search",
+        selectedPlaceIndex: 0,
+        expandedPlaceIndex: null,
+        selectedExpandedSlotIndex: 0,
+        pendingBookingPlaceIndex: null,
         results,
       }));
     } catch (error) {
@@ -199,30 +156,34 @@ export function App(props: AppProps) {
 
   async function handleSearch(): Promise<void> {
     const search = searchState();
-    await runSearch(search.query, search.near, search.date, search.tenantId);
+    await runSearch(search.term, search.mode, search.date);
   }
 
-  async function handleBookSelected(): Promise<void> {
-    const search = searchState();
-    const slots = collectBookableSlots(search);
-    if (slots.length === 0) {
+  function openBookingPromptFor(slot: BookableSlot): void {
+    setBookingPromptSlot(slot);
+    setBookingPromptChoice("reject");
+    setBookingPromptOpen(true);
+  }
+
+  function closeBookingPrompt(): void {
+    setBookingPromptOpen(false);
+    setBookingPromptChoice("reject");
+    setBookingPromptSlot(null);
+  }
+
+  async function handleBookSelected(slot: BookableSlot): Promise<void> {
+    if (!slot) {
       setSearchState((state) => ({
         ...state,
-        error: "No bookable slots in current results.",
+        error: "No bookable slots for selected place.",
       }));
-      return;
-    }
-
-    const selectedIndex = Math.max(0, Math.min(search.selectedSlotIndex, slots.length - 1));
-    const selectedSlot = slots[selectedIndex];
-    if (!selectedSlot) {
       return;
     }
 
     setSearchState((state) => ({
       ...state,
       booking: true,
-      pendingBookingSlotIndex: null,
+      pendingBookingPlaceIndex: null,
       error: "",
       bookingMessage: "",
     }));
@@ -231,10 +192,10 @@ export function App(props: AppProps) {
       const result = await props.app.authService.runWithValidSession((validSession) => {
         setSession(validSession);
         return props.app.purchaseService.purchaseSlot(validSession, {
-          tenantId: selectedSlot.tenantId,
-          resourceId: selectedSlot.resourceId,
-          start: `${selectedSlot.startDate}T${selectedSlot.startTime}`,
-          duration: selectedSlot.duration,
+          tenantId: slot.tenantId,
+          resourceId: slot.resourceId,
+          start: `${slot.startDate}T${slot.startTime}`,
+          duration: slot.duration,
           numberOfPlayers: 4,
         });
       });
@@ -242,9 +203,9 @@ export function App(props: AppProps) {
       setSearchState((state) => ({
         ...state,
         booking: false,
-        pendingBookingSlotIndex: null,
+        pendingBookingPlaceIndex: null,
         bookingMessage:
-          `Booked ${selectedSlot.tenantName} ${selectedSlot.startTime} (${selectedSlot.price})` +
+          `Booked ${slot.tenantName} ${slot.startTime} (${slot.price})` +
           ` payment_id=${result.final.paymentId ?? "unknown"}`,
       }));
     } catch (error) {
@@ -276,118 +237,223 @@ export function App(props: AppProps) {
       return;
     }
 
-    if (mode() === "search") {
-      const slots = collectBookableSlots(searchState());
+    if (mode() !== "search") {
+      return;
+    }
 
+    if (bookingPromptOpen()) {
+      if (key.name === "left") {
+        setBookingPromptChoice("reject");
+        return;
+      }
+
+      if (key.name === "right") {
+        setBookingPromptChoice("confirm");
+        return;
+      }
+
+      if (key.name === "tab") {
+        setBookingPromptChoice((choice) => (choice === "reject" ? "confirm" : "reject"));
+        return;
+      }
+
+      if (key.name === "escape") {
+        closeBookingPrompt();
+        return;
+      }
+
+      if (isSubmitKey) {
+        const selectedSlot = bookingPromptSlot();
+        const selectedChoice = bookingPromptChoice();
+        closeBookingPrompt();
+
+        if (selectedChoice === "confirm" && selectedSlot) {
+          void handleBookSelected(selectedSlot);
+        }
+        return;
+      }
+
+      return;
+    }
+
+    const search = searchState();
+    const summaries = placeSummaries();
+
+    if (key.ctrl && key.name === "l") {
+      void handleLogout();
+      return;
+    }
+
+    if (search.focusField === "search") {
       if (key.name === "tab") {
         setSearchState((state) => ({
           ...state,
-          focusField:
-            state.focusField === "query"
-              ? "near"
-              : state.focusField === "near"
-                ? "date"
-              : state.focusField === "date"
-                ? "tenantId"
-                : "query",
+          mode: toggleSearchMode(state.mode),
+          expandedPlaceIndex: null,
+          selectedExpandedSlotIndex: 0,
+          pendingBookingPlaceIndex: null,
+          bookingMessage: "",
+          error: "",
         }));
+        return;
       }
 
-      if ((key.name === "down" || key.name === "j") && slots.length > 0) {
+      if ((key.name === "left" || key.name === "right") && !search.loading) {
+        const delta = key.name === "right" ? 1 : -1;
+        const nextDate = shiftIsoDateByDays(search.date, delta);
         setSearchState((state) => ({
           ...state,
-          selectedSlotIndex: Math.min(state.selectedSlotIndex + 1, slots.length - 1),
-          pendingBookingSlotIndex: null,
+          date: nextDate,
+          expandedPlaceIndex: null,
+          selectedExpandedSlotIndex: 0,
+          pendingBookingPlaceIndex: null,
+          bookingMessage: "",
+          error: "",
         }));
+
+        if (search.term.trim().length > 0) {
+          void runSearch(search.term, search.mode, nextDate);
+        }
+        return;
       }
 
-      if ((key.name === "up" || key.name === "k") && slots.length > 0) {
-        setSearchState((state) => ({
-          ...state,
-          selectedSlotIndex: Math.max(state.selectedSlotIndex - 1, 0),
-          pendingBookingSlotIndex: null,
-        }));
+      if ((key.name === "down" || key.name === "j") && summaries.length > 0) {
+        setSearchState((state) => ({ ...state, focusField: "results" }));
+        return;
       }
 
       if (isSubmitKey || (key.ctrl && key.name === "s")) {
         void handleSearch();
       }
 
-      if (
-        (key.name === "left" || key.name === "right") &&
-        !searchState().loading &&
-        searchState().focusField === "date"
-      ) {
-        const delta = key.name === "right" ? 1 : -1;
-        const nextDate = shiftIsoDateByDays(searchState().date, delta);
+      return;
+    }
 
-        setSearchState((state) => ({
-          ...state,
-          date: nextDate,
-          pendingBookingSlotIndex: null,
-          bookingMessage: "",
-          error: "",
-        }));
+    if (search.focusField === "results") {
+      const expandedSummary =
+        search.expandedPlaceIndex === search.selectedPlaceIndex
+          ? summaries[search.selectedPlaceIndex]
+          : null;
+      const expandedSlots = expandedSummary ? collectBookableSlots(expandedSummary.source) : [];
 
-        void runSearch(searchState().query, searchState().near, nextDate, searchState().tenantId);
+      if (key.name === "tab") {
+        setSearchState((state) => ({ ...state, focusField: "search" }));
+        return;
       }
 
-      if (
-        (key.name === "b" || (key.ctrl && key.name === "b")) &&
-        !searchState().booking &&
-        !searchState().loading
-      ) {
-        const selectedIndex = searchState().selectedSlotIndex;
-        const selectedSlot = slots[selectedIndex];
-
-        if (!selectedSlot) {
+      if ((key.name === "down" || key.name === "j") && summaries.length > 0) {
+        if (expandedSlots.length > 0) {
           setSearchState((state) => ({
             ...state,
-            error: "No bookable slots in current results.",
+            selectedExpandedSlotIndex: Math.min(
+              state.selectedExpandedSlotIndex + 1,
+              expandedSlots.length - 1,
+            ),
+            pendingBookingPlaceIndex: null,
           }));
           return;
         }
 
-        if (searchState().pendingBookingSlotIndex === selectedIndex) {
-          void handleBookSelected();
-        } else {
-          setSearchState((state) => ({
-            ...state,
-            pendingBookingSlotIndex: selectedIndex,
-            error: "",
-            bookingMessage: `Press B again to confirm charge for ${selectedSlot.tenantName} ${selectedSlot.startTime} (${selectedSlot.price}).`,
-          }));
-        }
-      }
-
-      if (key.name === "escape") {
         setSearchState((state) => ({
           ...state,
-          pendingBookingSlotIndex: null,
-          bookingMessage: "",
+          selectedPlaceIndex: Math.min(state.selectedPlaceIndex + 1, summaries.length - 1),
+          expandedPlaceIndex: null,
+          selectedExpandedSlotIndex: 0,
+          pendingBookingPlaceIndex: null,
         }));
+        return;
       }
 
-      if (key.ctrl && key.name === "l") {
-        void handleLogout();
+      if ((key.name === "up" || key.name === "k") && summaries.length > 0) {
+        if (expandedSlots.length > 0) {
+          if (search.selectedExpandedSlotIndex === 0) {
+            setSearchState((state) => ({
+              ...state,
+              expandedPlaceIndex: null,
+              selectedExpandedSlotIndex: 0,
+              pendingBookingPlaceIndex: null,
+            }));
+            return;
+          }
+
+          setSearchState((state) => ({
+            ...state,
+            selectedExpandedSlotIndex: Math.max(state.selectedExpandedSlotIndex - 1, 0),
+            pendingBookingPlaceIndex: null,
+          }));
+          return;
+        }
+
+        if (search.selectedPlaceIndex === 0) {
+          setSearchState((state) => ({ ...state, focusField: "search" }));
+          return;
+        }
+
+        setSearchState((state) => ({
+          ...state,
+          selectedPlaceIndex: Math.max(state.selectedPlaceIndex - 1, 0),
+          expandedPlaceIndex: null,
+          selectedExpandedSlotIndex: 0,
+          pendingBookingPlaceIndex: null,
+        }));
+        return;
       }
+
+      if (isSubmitKey || key.name === "right") {
+        if (summaries.length === 0) {
+          return;
+        }
+
+        if (isSubmitKey && expandedSlots.length > 0 && expandedSummary) {
+          const selectedSlot = pickBookableSlotByIndex(
+            expandedSummary.source,
+            search.selectedExpandedSlotIndex,
+          );
+          if (selectedSlot) {
+            openBookingPromptFor(selectedSlot);
+          }
+          return;
+        }
+
+        setSearchState((state) => ({
+          ...state,
+          expandedPlaceIndex: state.selectedPlaceIndex,
+          selectedExpandedSlotIndex: 0,
+          error: "",
+        }));
+        return;
+      }
+
+      if (key.name === "left") {
+        setSearchState((state) => ({
+          ...state,
+          expandedPlaceIndex: null,
+          selectedExpandedSlotIndex: 0,
+        }));
+        return;
+      }
+    }
+
+    if (key.name === "escape") {
+      setSearchState((state) => ({
+        ...state,
+        focusField: "search",
+        expandedPlaceIndex: null,
+        selectedExpandedSlotIndex: 0,
+        pendingBookingPlaceIndex: null,
+        bookingMessage: "",
+      }));
     }
   });
 
   return (
     <box
       flexDirection="column"
-      padding={1}
-      gap={1}
       flexGrow={1}
+      width="100%"
+      height="100%"
       backgroundColor={theme.appBg}
     >
-      <box border borderColor={theme.panelBorder} backgroundColor={theme.panelBg} padding={1}>
-        <text fg={theme.text}>
-          <strong>padel-tui</strong> - reverse-engineered CLI/TUI
-        </text>
-      </box>
-
       <Show when={mode() === "loading"}>
         <box border borderColor={theme.panelBorder} backgroundColor={theme.panelBg} padding={1}>
           <text fg={theme.text}>Loading...</text>
@@ -395,208 +461,99 @@ export function App(props: AppProps) {
       </Show>
 
       <Show when={mode() === "login"}>
-        <box
-          border
-          borderColor={theme.panelBorder}
-          backgroundColor={theme.panelBg}
-          padding={1}
-          flexDirection="column"
-          gap={1}
-        >
-          <text fg={theme.text}>Login</text>
-          <text fg={theme.muted}>Tab switches field, Enter submits, Ctrl+S submits.</text>
-          <box flexDirection="row" gap={1}>
-            <text fg={theme.text}>Email:</text>
-            <input
-              value={loginState().email}
-              onInput={(value) =>
-                setLoginState((state) => ({ ...state, email: value, error: "" }))
-              }
-              placeholder="you@example.com"
-              focused={loginState().focusField === "email"}
-              width={40}
-              backgroundColor={theme.inputBg}
-              focusedBackgroundColor={theme.inputFocusedBg}
-              textColor={theme.inputText}
-              placeholderColor={theme.inputPlaceholder}
-              cursorColor={theme.accent}
-            />
-          </box>
-          <box flexDirection="row" gap={1}>
-            <text fg={theme.text}>Password:</text>
-            <input
-              value={loginState().password}
-              onInput={(value) =>
-                setLoginState((state) => ({
-                  ...state,
-                  password: value,
-                  error: "",
-                }))
-              }
-              placeholder="password"
-              focused={loginState().focusField === "password"}
-              width={40}
-              backgroundColor={theme.inputBg}
-              focusedBackgroundColor={theme.inputFocusedBg}
-              textColor={theme.inputText}
-              placeholderColor={theme.inputPlaceholder}
-              cursorColor={theme.accent}
-            />
-          </box>
-          <text fg={theme.muted}>Tip: if Enter is flaky, use Ctrl+S to submit.</text>
-          <Show when={Boolean(loginState().error)}>
-            <text fg={theme.error}>Error: {loginState().error}</text>
-          </Show>
-        </box>
+        <LoginScreen
+          theme={theme}
+          state={loginState()}
+          onEmailInput={(value) => setLoginState((state) => ({ ...state, email: value, error: "" }))}
+          onPasswordInput={(value) =>
+            setLoginState((state) => ({
+              ...state,
+              password: value,
+              error: "",
+            }))
+          }
+        />
       </Show>
 
       <Show when={mode() === "search"}>
-        <box flexDirection="column" gap={1}>
-          <box
-            border
-            borderColor={theme.panelBorder}
-            backgroundColor={theme.panelBg}
-            padding={1}
-            flexDirection="column"
-            gap={1}
-          >
-            <text fg={theme.text}>Search availability</text>
-            <text fg={theme.muted}>
-              Tab query/near/date/tenant, Enter run, Left/Right day +/-1 (on date), Up/Down select slot, B then B confirms booking, Esc cancels confirmation, Ctrl+L logout.
-            </text>
-            <box flexDirection="row" gap={1}>
-              <text fg={theme.text}>Query:</text>
-              <input
-                value={searchState().query}
-                onInput={(value) =>
-                  setSearchState((state) => ({
-                    ...state,
-                    query: value,
-                    error: "",
-                    pendingBookingSlotIndex: null,
-                    bookingMessage: "",
-                  }))
-                }
-                placeholder="berlin"
-                focused={searchState().focusField === "query"}
-                width={30}
-                backgroundColor={theme.inputBg}
-                focusedBackgroundColor={theme.inputFocusedBg}
-                textColor={theme.inputText}
-                placeholderColor={theme.inputPlaceholder}
-                cursorColor={theme.accent}
-              />
-            </box>
-            <box flexDirection="row" gap={1}>
-              <text fg={theme.text}>Near:</text>
-              <input
-                value={searchState().near}
-                onInput={(value) =>
-                  setSearchState((state) => ({
-                    ...state,
-                    near: value,
-                    error: "",
-                    pendingBookingSlotIndex: null,
-                    bookingMessage: "",
-                  }))
-                }
-                placeholder="optional location (e.g. berlin)"
-                focused={searchState().focusField === "near"}
-                width={30}
-                backgroundColor={theme.inputBg}
-                focusedBackgroundColor={theme.inputFocusedBg}
-                textColor={theme.inputText}
-                placeholderColor={theme.inputPlaceholder}
-                cursorColor={theme.accent}
-              />
-            </box>
-            <box flexDirection="row" gap={1}>
-              <text fg={theme.text}>Date:</text>
-              <input
-                value={searchState().date}
-                onInput={(value) =>
-                  setSearchState((state) => ({
-                    ...state,
-                    date: value,
-                    error: "",
-                    pendingBookingSlotIndex: null,
-                    bookingMessage: "",
-                  }))
-                }
-                placeholder="YYYY-MM-DD"
-                focused={searchState().focusField === "date"}
-                width={20}
-                backgroundColor={theme.inputBg}
-                focusedBackgroundColor={theme.inputFocusedBg}
-                textColor={theme.inputText}
-                placeholderColor={theme.inputPlaceholder}
-                cursorColor={theme.accent}
-              />
-            </box>
-            <box flexDirection="row" gap={1}>
-              <text fg={theme.text}>Tenant:</text>
-              <input
-                value={searchState().tenantId}
-                onInput={(value) =>
-                  setSearchState((state) => ({
-                    ...state,
-                    tenantId: value,
-                    error: "",
-                    pendingBookingSlotIndex: null,
-                    bookingMessage: "",
-                  }))
-                }
-                placeholder="optional tenant_id"
-                focused={searchState().focusField === "tenantId"}
-                width={40}
-                backgroundColor={theme.inputBg}
-                focusedBackgroundColor={theme.inputFocusedBg}
-                textColor={theme.inputText}
-                placeholderColor={theme.inputPlaceholder}
-                cursorColor={theme.accent}
-              />
-            </box>
-            <Show when={searchState().loading}>
-              <text fg={theme.text}>Loading availability...</text>
-            </Show>
-            <Show when={searchState().booking}>
-              <text fg={theme.text}>Booking selected slot...</text>
-            </Show>
-            <Show when={Boolean(searchState().bookingMessage)}>
-              <text fg={theme.success}>{searchState().bookingMessage}</text>
-            </Show>
-            <Show when={Boolean(searchState().error)}>
-              <text fg={theme.error}>Error: {searchState().error}</text>
-            </Show>
-          </box>
-
-          <scrollbox
-            border
-            borderColor={theme.panelBorder}
-            backgroundColor={theme.panelBg}
-            padding={1}
-            flexDirection="column"
-            height={20}
-          >
-            <Show
-              when={collectBookableSlots(searchState()).length > 0}
-              fallback={<text fg={theme.muted}>No results yet. Run a search first.</text>}
-            >
-              <For each={collectBookableSlots(searchState())}>
-                {(slot, index) => (
-                  <text
-                    fg={index() === searchState().selectedSlotIndex ? theme.accent : theme.text}
-                  >
-                    {index() === searchState().selectedSlotIndex
-                      ? searchState().pendingBookingSlotIndex === index()
-                        ? "!"
-                        : ">"
-                      : " "} {slot.tenantName} | {slot.startDate} {slot.startTime} | {slot.duration} min | {slot.price}
-                  </text>
-                )}
-              </For>
-            </Show>
-          </scrollbox>
+        <box flexDirection="column" flexGrow={1}>
+          <SearchScreen
+            state={searchState()}
+            summaries={placeSummaries()}
+            theme={theme}
+            bookingPromptOpen={bookingPromptOpen()}
+            onTermInput={(value: string) => {
+              setSearchState((state) => ({
+                ...state,
+                term: value,
+                error: "",
+                expandedPlaceIndex: null,
+                selectedExpandedSlotIndex: 0,
+                pendingBookingPlaceIndex: null,
+                bookingMessage: "",
+              }));
+            }}
+            onFocusSearch={() => {
+              setSearchState((state) => ({ ...state, focusField: "search" }));
+            }}
+            onToggleMode={() => {
+              setSearchState((state) => ({
+                ...state,
+                mode: toggleSearchMode(state.mode),
+                error: "",
+                expandedPlaceIndex: null,
+                selectedExpandedSlotIndex: 0,
+                pendingBookingPlaceIndex: null,
+                bookingMessage: "",
+              }));
+            }}
+            onFocusResults={() => {
+              setSearchState((state) => ({ ...state, focusField: "results" }));
+            }}
+            onSelectPlace={(index: number) => {
+              setSearchState((state) => ({
+                ...state,
+                focusField: "results",
+                selectedPlaceIndex: index,
+                pendingBookingPlaceIndex: null,
+              }));
+            }}
+            onExpandPlace={(index: number) => {
+              setSearchState((state) => ({
+                ...state,
+                focusField: "results",
+                selectedPlaceIndex: index,
+                expandedPlaceIndex: state.expandedPlaceIndex === index ? null : index,
+                selectedExpandedSlotIndex: 0,
+                pendingBookingPlaceIndex: null,
+              }));
+            }}
+            onSelectExpandedSlot={(slotIndex: number) => {
+              setSearchState((state) => ({
+                ...state,
+                focusField: "results",
+                selectedExpandedSlotIndex: slotIndex,
+                pendingBookingPlaceIndex: null,
+              }));
+            }}
+          />
+          <BookingConfirmModal
+            open={bookingPromptOpen()}
+            slot={bookingPromptSlot()}
+            choice={bookingPromptChoice()}
+            theme={theme}
+            onChooseReject={() => {
+              setBookingPromptChoice("reject");
+              closeBookingPrompt();
+            }}
+            onChooseConfirm={() => {
+              const slot = bookingPromptSlot();
+              closeBookingPrompt();
+              if (slot) {
+                void handleBookSelected(slot);
+              }
+            }}
+          />
         </box>
       </Show>
     </box>

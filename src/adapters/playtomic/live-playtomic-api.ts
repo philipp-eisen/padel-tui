@@ -10,6 +10,7 @@ import type {
   PaymentMethod,
   Session,
   Tenant,
+  TenantResource,
   UpdatePaymentIntentInput,
 } from "../../domain/types";
 import { PlaytomicApiError } from "./errors";
@@ -39,6 +40,19 @@ const TenantResponseSchema = z.object({
       city: z.string().optional(),
       timezone: z.string().optional(),
     })
+    .optional(),
+  resources: z
+    .array(
+      z.object({
+        resource_id: z.string().min(1),
+        name: z.string().optional(),
+        properties: z
+          .object({
+            resource_type: z.string().optional(),
+          })
+          .optional(),
+      }),
+    )
     .optional(),
 });
 
@@ -158,11 +172,26 @@ function parseLastPageFromLinkHeader(linkHeader: string | null): number {
 }
 
 function mapTenant(tenant: z.infer<typeof TenantResponseSchema>): Tenant {
+  const resources = tenant.resources?.map((resource) => {
+    const rawType = resource.properties?.resource_type?.toLowerCase();
+    const normalizedType: TenantResource["resourceType"] =
+      rawType === "indoor" || rawType === "outdoor" || rawType === "covered"
+        ? rawType
+        : "unknown";
+
+    return {
+      resourceId: resource.resource_id,
+      name: resource.name,
+      resourceType: normalizedType,
+    };
+  });
+
   return {
     tenantId: tenant.tenant_id,
     tenantName: tenant.tenant_name,
     city: tenant.address?.city,
     timezone: tenant.address?.timezone,
+    resources,
   };
 }
 

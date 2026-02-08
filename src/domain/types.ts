@@ -16,6 +16,13 @@ export interface Tenant {
   tenantName: string;
   city?: string;
   timezone?: string;
+  resources?: TenantResource[];
+}
+
+export interface TenantResource {
+  resourceId: string;
+  name?: string;
+  resourceType?: "indoor" | "outdoor" | "covered" | "unknown";
 }
 
 export interface AvailabilitySlot {

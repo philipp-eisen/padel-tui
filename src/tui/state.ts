@@ -1,6 +1,8 @@
 import type { TenantAvailability } from "../domain/types";
 
 export type ViewMode = "loading" | "login" | "search";
+export type SearchMode = "location" | "name";
+export type SearchFocusField = "search" | "results";
 
 export interface LoginFormState {
   email: string;
@@ -10,15 +12,16 @@ export interface LoginFormState {
 }
 
 export interface SearchState {
-  query: string;
-  near: string;
-  tenantId: string;
+  term: string;
+  mode: SearchMode;
   date: string;
-  focusField: "query" | "near" | "date" | "tenantId";
+  focusField: SearchFocusField;
   loading: boolean;
   booking: boolean;
-  selectedSlotIndex: number;
-  pendingBookingSlotIndex: number | null;
+  selectedPlaceIndex: number;
+  expandedPlaceIndex: number | null;
+  selectedExpandedSlotIndex: number;
+  pendingBookingPlaceIndex: number | null;
   bookingMessage: string;
   error: string;
   results: TenantAvailability[];
