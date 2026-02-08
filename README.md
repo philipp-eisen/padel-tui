@@ -2,6 +2,16 @@
 
 TUI-first terminal app for searching and booking padel courts.
 
+## What it does today
+
+- Search availabilities (TUI + CLI)
+- Book available slots (TUI + CLI)
+
+## Planned next
+
+- List existing bookings
+- Cancel bookings
+
 ## Install
 
 ```bash
