@@ -1,8 +1,8 @@
 import type { MatchSummary, TenantAvailability } from "../domain/types";
 
-export type ViewMode = "loading" | "login" | "search" | "matches";
+export type ViewMode = "loading" | "login" | "search";
 export type SearchMode = "location" | "name";
-export type SearchFocusField = "search" | "results";
+export type SearchFocusField = "search" | "matches" | "results";
 
 export interface LoginFormState {
   email: string;

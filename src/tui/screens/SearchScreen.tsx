@@ -1,6 +1,7 @@
-import type { SearchState } from "../state";
+import type { MatchesState, SearchState } from "../state";
 import type { PlaceSummary } from "../types";
 import type { TuiTheme } from "../theme";
+import { ActiveMatchesPanel } from "../components/ActiveMatchesPanel";
 import { SearchToolbar } from "../components/SearchToolbar";
 import { LoadingStrip } from "../components/LoadingStrip";
 import { PlacesTable } from "../components/PlacesTable";
@@ -8,13 +9,18 @@ import { HotkeysBar } from "../components/HotkeysBar";
 
 interface SearchScreenProps {
   state: SearchState;
+  matchesState: MatchesState;
   summaries: PlaceSummary[];
   theme: TuiTheme;
   bookingPromptOpen: boolean;
   bookingPromptChoice: "reject" | "confirm";
+  matchesCancelPromptOpen: boolean;
+  matchesCancelPromptChoice: "reject" | "confirm";
   onTermInput: (value: string) => void;
   onFocusSearch: () => void;
   onToggleMode: () => void;
+  onFocusMatches: () => void;
+  onSelectMatch: (index: number) => void;
   onFocusResults: () => void;
   onSelectPlace: (index: number) => void;
   onExpandPlace: (index: number) => void;
@@ -73,11 +79,21 @@ export function SearchScreen(props: SearchScreenProps) {
         onSelectExpandedSlot={props.onSelectExpandedSlot}
       />
 
+      <ActiveMatchesPanel
+        state={props.matchesState}
+        focusField={props.state.focusField}
+        cancelPromptOpen={props.matchesCancelPromptOpen}
+        cancelPromptChoice={props.matchesCancelPromptChoice}
+        theme={props.theme}
+        onFocusMatches={props.onFocusMatches}
+        onSelectMatch={props.onSelectMatch}
+      />
+
       <HotkeysBar
         theme={props.theme}
         focusField={props.state.focusField}
         hasExpandedPlace={props.state.expandedPlaceIndex === props.state.selectedPlaceIndex}
-        bookingPromptOpen={props.bookingPromptOpen}
+        bookingPromptOpen={props.bookingPromptOpen || props.matchesCancelPromptOpen}
       />
     </box>
   );

@@ -64,10 +64,11 @@ chmod +x padel-tui
   - `Left/Right` toggles `No`/`Yes`.
   - `Enter` applies choice, `Esc` cancels.
 - Global: `Ctrl+L` logs out.
-- Matches view:
-  - Press `M` in search view to open active matches.
-  - `R` refreshes, `C` then `C` cancels selected match.
-  - `Esc` returns to search.
+- Active matches panel (on main screen):
+  - `Down` from search focuses active matches.
+  - `Delete` opens cancel confirmation for selected match.
+  - `Left/Right` choose `No`/`Yes`, `Enter` applies, `Esc` cancels.
+  - `R` refreshes matches.
 
 ## CLI (from source)
 

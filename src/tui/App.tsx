@@ -7,12 +7,12 @@ import type {
   LoginFormState,
   MatchesState,
   SearchMode,
+  SearchFocusField,
   SearchState,
   ViewMode,
 } from "./state";
 import type { BookableSlot } from "./types";
 import { LoginScreen } from "./screens/LoginScreen";
-import { MatchesScreen } from "./screens/MatchesScreen";
 import { SearchScreen } from "./screens/SearchScreen";
 import { theme } from "./theme";
 import {
@@ -35,6 +35,18 @@ function toggleSearchMode(mode: SearchMode): SearchMode {
 type BookingPromptChoice = "reject" | "confirm";
 const TUI_MAX_TENANTS = 30;
 const TUI_MATCHES_LIMIT = 40;
+
+function nextSearchFocus(current: SearchFocusField): SearchFocusField {
+  if (current === "search") {
+    return "matches";
+  }
+
+  if (current === "matches") {
+    return "results";
+  }
+
+  return "search";
+}
 
 export function App(props: AppProps) {
   let latestSearchRequestId = 0;
@@ -72,6 +84,9 @@ export function App(props: AppProps) {
   });
   const [bookingPromptOpen, setBookingPromptOpen] = createSignal(false);
   const [bookingPromptChoice, setBookingPromptChoice] = createSignal<BookingPromptChoice>("reject");
+  const [matchesCancelPromptOpen, setMatchesCancelPromptOpen] = createSignal(false);
+  const [matchesCancelPromptChoice, setMatchesCancelPromptChoice] =
+    createSignal<BookingPromptChoice>("reject");
 
   const placeSummaries = createMemo(() => summarizeAvailablePlaces(searchState().results));
 
@@ -85,6 +100,7 @@ export function App(props: AppProps) {
       if (restoredSession) {
         setSession(restoredSession);
         setMode("search");
+        void loadMatches();
         return;
       }
     } catch {
@@ -96,6 +112,14 @@ export function App(props: AppProps) {
   async function handleLogout(): Promise<void> {
     await props.app.authService.logout();
     setSession(null);
+    setMatchesState({
+      loading: false,
+      matches: [],
+      selectedIndex: 0,
+      pendingCancelMatchId: null,
+      message: "",
+      error: "",
+    });
     setMode("login");
   }
 
@@ -119,6 +143,7 @@ export function App(props: AppProps) {
       setSession(nextSession);
       setSearchState((state) => ({ ...state, error: "" }));
       setMode("search");
+      void loadMatches();
     } catch (error) {
       setLoginState((state) => ({
         ...state,
@@ -258,11 +283,6 @@ export function App(props: AppProps) {
     }
   }
 
-  function openMatchesView(): void {
-    setMode("matches");
-    void loadMatches();
-  }
-
   function openBookingPrompt(): void {
     setBookingPromptChoice("reject");
     setBookingPromptOpen(true);
@@ -271,6 +291,16 @@ export function App(props: AppProps) {
   function closeBookingPrompt(): void {
     setBookingPromptOpen(false);
     setBookingPromptChoice("reject");
+  }
+
+  function openMatchesCancelPrompt(): void {
+    setMatchesCancelPromptChoice("reject");
+    setMatchesCancelPromptOpen(true);
+  }
+
+  function closeMatchesCancelPrompt(): void {
+    setMatchesCancelPromptOpen(false);
+    setMatchesCancelPromptChoice("reject");
   }
 
   function getSelectedSlotForBooking(): BookableSlot | null {
@@ -372,73 +402,45 @@ export function App(props: AppProps) {
       return;
     }
 
-    if (mode() === "matches") {
-      if (key.ctrl && key.name === "l") {
-        void handleLogout();
+    if (mode() !== "search") {
+      return;
+    }
+
+    if (matchesCancelPromptOpen()) {
+      if (key.name === "left") {
+        setMatchesCancelPromptChoice("reject");
         return;
       }
 
-      if (key.name === "escape" || key.name === "m") {
-        setMode("search");
+      if (key.name === "right") {
+        setMatchesCancelPromptChoice("confirm");
         return;
       }
 
-      if (key.name === "r") {
-        void loadMatches();
+      if (key.name === "tab") {
+        setMatchesCancelPromptChoice((choice) => (choice === "reject" ? "confirm" : "reject"));
         return;
       }
 
-      const state = matchesState();
-      const selectedMatch = state.matches[state.selectedIndex];
-
-      if ((key.name === "down" || key.name === "j") && state.matches.length > 0) {
-        setMatchesState((prev) => ({
-          ...prev,
-          selectedIndex: Math.min(prev.selectedIndex + 1, prev.matches.length - 1),
-          pendingCancelMatchId: null,
-          message: "",
-          error: "",
-        }));
+      if (key.name === "escape") {
+        closeMatchesCancelPrompt();
         return;
       }
 
-      if ((key.name === "up" || key.name === "k") && state.matches.length > 0) {
-        setMatchesState((prev) => ({
-          ...prev,
-          selectedIndex: Math.max(prev.selectedIndex - 1, 0),
-          pendingCancelMatchId: null,
-          message: "",
-          error: "",
-        }));
-        return;
-      }
+      if (isSubmitKey) {
+        if (key.eventType === "repeat") {
+          return;
+        }
 
-      if ((key.name === "c" || key.name === "x") && selectedMatch && !state.loading) {
-        if (state.pendingCancelMatchId === selectedMatch.matchId) {
+        const choice = matchesCancelPromptChoice();
+        closeMatchesCancelPrompt();
+
+        if (choice === "confirm") {
           void cancelSelectedMatch();
-        } else {
-          setMatchesState((prev) => ({
-            ...prev,
-            pendingCancelMatchId: selectedMatch.matchId,
-            error: "",
-            message: `Press C again to cancel ${selectedMatch.startDate} at ${selectedMatch.tenantName}.`,
-          }));
         }
         return;
       }
 
-      if (isSubmitKey && selectedMatch?.shareLink) {
-        setMatchesState((prev) => ({
-          ...prev,
-          message: `Share: ${selectedMatch.shareLink}`,
-          error: "",
-        }));
-      }
-
-      return;
-    }
-
-    if (mode() !== "search") {
       return;
     }
 
@@ -489,11 +491,6 @@ export function App(props: AppProps) {
       return;
     }
 
-    if (key.name === "m") {
-      openMatchesView();
-      return;
-    }
-
     if (search.focusField === "search") {
       if (key.name === "tab") {
         invalidatePendingSearch();
@@ -529,13 +526,95 @@ export function App(props: AppProps) {
         return;
       }
 
-      if ((key.name === "down" || key.name === "j") && summaries.length > 0) {
-        setSearchState((state) => ({ ...state, focusField: "results" }));
+      if (
+        (key.name === "down" || key.name === "j") &&
+        (matchesState().matches.length > 0 || summaries.length > 0)
+      ) {
+        setSearchState((state) => ({
+          ...state,
+          focusField: matchesState().matches.length > 0 ? "matches" : "results",
+        }));
         return;
       }
 
       if (isSubmitKey || (key.ctrl && key.name === "s")) {
         void handleSearch();
+      }
+
+      return;
+    }
+
+    if (search.focusField === "matches") {
+      const state = matchesState();
+      const selectedMatch = state.matches[state.selectedIndex];
+
+      if (key.name === "tab") {
+        setSearchState((state) => ({ ...state, focusField: nextSearchFocus(state.focusField) }));
+        closeMatchesCancelPrompt();
+        return;
+      }
+
+      if (key.name === "r") {
+        void loadMatches();
+        return;
+      }
+
+      if ((key.name === "down" || key.name === "j") && state.matches.length > 0) {
+        if (state.selectedIndex === state.matches.length - 1 && summaries.length > 0) {
+          setSearchState((prev) => ({ ...prev, focusField: "results" }));
+          return;
+        }
+
+        setMatchesState((prev) => ({
+          ...prev,
+          selectedIndex: Math.min(prev.selectedIndex + 1, prev.matches.length - 1),
+          pendingCancelMatchId: null,
+          message: "",
+          error: "",
+        }));
+        return;
+      }
+
+      if ((key.name === "up" || key.name === "k") && state.matches.length > 0) {
+        if (state.selectedIndex === 0) {
+          setSearchState((prev) => ({ ...prev, focusField: "search" }));
+          return;
+        }
+
+        setMatchesState((prev) => ({
+          ...prev,
+          selectedIndex: Math.max(prev.selectedIndex - 1, 0),
+          pendingCancelMatchId: null,
+          message: "",
+          error: "",
+        }));
+        return;
+      }
+
+      if (key.name === "delete" || key.name === "backspace") {
+        if (selectedMatch && !state.loading) {
+          setMatchesState((prev) => ({
+            ...prev,
+            pendingCancelMatchId: selectedMatch.matchId,
+            message: "",
+            error: "",
+          }));
+          openMatchesCancelPrompt();
+        }
+        return;
+      }
+
+      if (isSubmitKey && selectedMatch?.shareLink) {
+        setMatchesState((prev) => ({
+          ...prev,
+          message: `Share: ${selectedMatch.shareLink}`,
+          error: "",
+        }));
+        return;
+      }
+
+      if (key.name === "escape") {
+        setSearchState((state) => ({ ...state, focusField: "search" }));
       }
 
       return;
@@ -549,7 +628,7 @@ export function App(props: AppProps) {
       const expandedSlots = expandedSummary ? collectBookableSlots(expandedSummary.source) : [];
 
       if (key.name === "tab") {
-        setSearchState((state) => ({ ...state, focusField: "search" }));
+        setSearchState((state) => ({ ...state, focusField: nextSearchFocus(state.focusField) }));
         return;
       }
 
@@ -601,7 +680,10 @@ export function App(props: AppProps) {
         }
 
         if (search.selectedPlaceIndex === 0) {
-          setSearchState((state) => ({ ...state, focusField: "search" }));
+          setSearchState((state) => ({
+            ...state,
+            focusField: matchesState().matches.length > 0 ? "matches" : "search",
+          }));
           closeBookingPrompt();
           return;
         }
@@ -699,10 +781,13 @@ export function App(props: AppProps) {
         <box flexDirection="column" flexGrow={1}>
           <SearchScreen
             state={searchState()}
+            matchesState={matchesState()}
             summaries={placeSummaries()}
             theme={theme}
             bookingPromptOpen={bookingPromptOpen()}
             bookingPromptChoice={bookingPromptChoice()}
+            matchesCancelPromptOpen={matchesCancelPromptOpen()}
+            matchesCancelPromptChoice={matchesCancelPromptChoice()}
             onTermInput={(value: string) => {
               invalidatePendingSearch();
               setSearchState((state) => ({
@@ -717,10 +802,12 @@ export function App(props: AppProps) {
                 bookingMessage: "",
               }));
               closeBookingPrompt();
+              closeMatchesCancelPrompt();
             }}
             onFocusSearch={() => {
               setSearchState((state) => ({ ...state, focusField: "search" }));
               closeBookingPrompt();
+              closeMatchesCancelPrompt();
             }}
             onToggleMode={() => {
               invalidatePendingSearch();
@@ -736,6 +823,21 @@ export function App(props: AppProps) {
                 bookingMessage: "",
               }));
               closeBookingPrompt();
+              closeMatchesCancelPrompt();
+            }}
+            onFocusMatches={() => {
+              setSearchState((state) => ({ ...state, focusField: "matches" }));
+            }}
+            onSelectMatch={(index: number) => {
+              setSearchState((state) => ({ ...state, focusField: "matches" }));
+              setMatchesState((state) => ({
+                ...state,
+                selectedIndex: index,
+                pendingCancelMatchId: null,
+                message: "",
+                error: "",
+              }));
+              closeMatchesCancelPrompt();
             }}
             onFocusResults={() => {
               setSearchState((state) => ({ ...state, focusField: "results" }));
@@ -748,6 +850,7 @@ export function App(props: AppProps) {
                 pendingBookingPlaceIndex: null,
               }));
               closeBookingPrompt();
+              closeMatchesCancelPrompt();
             }}
             onExpandPlace={(index: number) => {
               setSearchState((state) => ({
@@ -759,6 +862,7 @@ export function App(props: AppProps) {
                 pendingBookingPlaceIndex: null,
               }));
               closeBookingPrompt();
+              closeMatchesCancelPrompt();
             }}
             onSelectExpandedSlot={(slotIndex: number) => {
               setSearchState((state) => ({
@@ -768,25 +872,10 @@ export function App(props: AppProps) {
                 pendingBookingPlaceIndex: null,
               }));
               closeBookingPrompt();
+              closeMatchesCancelPrompt();
             }}
           />
         </box>
-      </Show>
-
-      <Show when={mode() === "matches"}>
-        <MatchesScreen
-          state={matchesState()}
-          theme={theme}
-          onSelectMatch={(index: number) => {
-            setMatchesState((state) => ({
-              ...state,
-              selectedIndex: index,
-              pendingCancelMatchId: null,
-              message: "",
-              error: "",
-            }));
-          }}
-        />
       </Show>
     </box>
   );

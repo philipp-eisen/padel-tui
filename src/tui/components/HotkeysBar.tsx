@@ -39,9 +39,24 @@ export function HotkeysBar(props: HotkeysBarProps) {
           <text fg={props.theme.accentMuted}>Tab mode</text>
           <text fg={props.theme.muted}>Left/Right date</text>
           <text fg={props.theme.accent}>Enter search</text>
-          <text fg={props.theme.muted}>Down list</text>
-          <text fg={props.theme.accentMuted}>M matches</text>
+          <text fg={props.theme.muted}>Down matches</text>
           <text fg={props.theme.muted}>Ctrl+L logout</text>
+        </box>
+      </Match>
+      <Match when={props.focusField === "matches"}>
+        <box
+          backgroundColor={props.theme.panelBg}
+          paddingLeft={1}
+          paddingRight={1}
+          height={1}
+          flexDirection="row"
+          justifyContent="space-between"
+        >
+          <text fg={props.theme.muted}>Up/Down select</text>
+          <text fg={props.theme.warning}>Delete cancel</text>
+          <text fg={props.theme.accent}>R refresh</text>
+          <text fg={props.theme.muted}>Down results</text>
+          <text fg={props.theme.muted}>Esc search</text>
         </box>
       </Match>
       <Match when={true}>
