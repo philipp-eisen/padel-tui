@@ -31,6 +31,34 @@ function compareSlotOrder(a: BookableSlot, b: BookableSlot): number {
   return aPrice - bPrice;
 }
 
+interface IsoDateParts {
+  year: number;
+  month: number;
+  day: number;
+}
+
+function parseIsoDateParts(input: string): IsoDateParts | null {
+  const match = input.match(/^(\d{4})-(\d{2})-(\d{2})$/u);
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const utcDate = new Date(Date.UTC(year, month - 1, day));
+  const isValidDate =
+    utcDate.getUTCFullYear() === year &&
+    utcDate.getUTCMonth() + 1 === month &&
+    utcDate.getUTCDate() === day;
+
+  if (!isValidDate) {
+    return null;
+  }
+
+  return { year, month, day };
+}
+
 export function todayIsoDate(): string {
   const now = new Date();
   const year = now.getFullYear();
@@ -40,29 +68,34 @@ export function todayIsoDate(): string {
 }
 
 export function shiftIsoDateByDays(input: string, deltaDays: number): string {
-  const parsed = new Date(input);
-  if (Number.isNaN(parsed.getTime())) {
+  const parsed = parseIsoDateParts(input);
+  if (!parsed) {
     return input;
   }
 
-  parsed.setDate(parsed.getDate() + deltaDays);
-  const year = parsed.getFullYear();
-  const month = `${parsed.getMonth() + 1}`.padStart(2, "0");
-  const day = `${parsed.getDate()}`.padStart(2, "0");
+  const shifted = new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day));
+  shifted.setUTCDate(shifted.getUTCDate() + deltaDays);
+
+  const year = shifted.getUTCFullYear();
+  const month = `${shifted.getUTCMonth() + 1}`.padStart(2, "0");
+  const day = `${shifted.getUTCDate()}`.padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
 export function formatHumanDate(input: string): string {
-  const parsed = new Date(input);
-  if (Number.isNaN(parsed.getTime())) {
+  const parsed = parseIsoDateParts(input);
+  if (!parsed) {
     return input;
   }
 
-  return parsed.toLocaleDateString("en-GB", {
+  const utcDate = new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day));
+
+  return utcDate.toLocaleDateString("en-GB", {
     weekday: "short",
     day: "2-digit",
     month: "short",
     year: "numeric",
+    timeZone: "UTC",
   });
 }
 
@@ -167,62 +200,23 @@ function formatSlotType(type: BookableSlot["resourceType"]): string {
   return "UNK";
 }
 
-function formatUtcSlotInTimezone(
+function formatSlotLocalTime(
   startDate: string,
   startTime: string,
   timezone?: string,
 ): { startDate: string; startTime: string; timeZoneLabel: string } {
-  const utcDate = new Date(`${startDate}T${startTime}Z`);
-  if (Number.isNaN(utcDate.getTime())) {
-    return {
-      startDate,
-      startTime,
-      timeZoneLabel: timezone?.trim() || "UTC",
-    };
-  }
-
-  const resolvedTimeZone = timezone?.trim() || "UTC";
-
-  try {
-    const dateLabel = new Intl.DateTimeFormat("en-CA", {
-      timeZone: resolvedTimeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(utcDate);
-
-    const timeParts = new Intl.DateTimeFormat("en-GB", {
-      timeZone: resolvedTimeZone,
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-      timeZoneName: "short",
-    }).formatToParts(utcDate);
-
-    const hour = timeParts.find((part) => part.type === "hour")?.value ?? "00";
-    const minute = timeParts.find((part) => part.type === "minute")?.value ?? "00";
-    const timeZoneLabel =
-      timeParts.find((part) => part.type === "timeZoneName")?.value ?? resolvedTimeZone;
-
-    return {
-      startDate: dateLabel,
-      startTime: `${hour}:${minute}`,
-      timeZoneLabel,
-    };
-  } catch {
-    return {
-      startDate,
-      startTime,
-      timeZoneLabel: resolvedTimeZone,
-    };
-  }
+  return {
+    startDate,
+    startTime,
+    timeZoneLabel: timezone?.trim() || "local",
+  };
 }
 
 export function buildSlotPreview(result: TenantAvailability, limit?: number): SlotPreview[] {
   const allSlots = collectBookableSlots(result);
   const slots = typeof limit === "number" ? allSlots.slice(0, limit) : allSlots;
   return slots.map((slot) => ({
-    ...formatUtcSlotInTimezone(slot.startDate, slot.startTime, result.tenant.timezone),
+    ...formatSlotLocalTime(slot.startDate, slot.startTime, result.tenant.timezone),
     duration: slot.duration,
     price: slot.price,
     courtName: slot.resourceName ?? slot.resourceId,

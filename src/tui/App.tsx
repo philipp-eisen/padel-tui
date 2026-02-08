@@ -30,6 +30,7 @@ function toggleSearchMode(mode: SearchMode): SearchMode {
 }
 
 type BookingPromptChoice = "reject" | "confirm";
+const TUI_MAX_TENANTS = 30;
 
 export function App(props: AppProps) {
   let latestSearchRequestId = 0;
@@ -135,6 +136,7 @@ export function App(props: AppProps) {
           query: searchMode === "name" ? trimmedTerm : undefined,
           near: searchMode === "location" ? trimmedTerm : undefined,
           date,
+          maxTenants: TUI_MAX_TENANTS,
         });
       });
 

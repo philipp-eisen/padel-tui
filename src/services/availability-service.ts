@@ -20,6 +20,39 @@ interface GeocodingResponse {
 }
 
 const DEFAULT_RADIUS_METERS = 50_000;
+const AVAILABILITY_CONCURRENCY = 5;
+
+interface LocalDateParts {
+  year: number;
+  month: number;
+  day: number;
+}
+
+async function mapWithConcurrency<T, U>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<U>,
+): Promise<U[]> {
+  const workerCount = Math.max(1, Math.min(concurrency, items.length));
+  const results = new Array<U>(items.length);
+  let cursor = 0;
+
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (true) {
+      const index = cursor;
+      cursor += 1;
+
+      if (index >= items.length) {
+        return;
+      }
+
+      results[index] = await mapper(items[index]!, index);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
+}
 
 async function geocodeLocation(query: string): Promise<{ lat: number; lon: number } | null> {
   const response = await ky
@@ -48,10 +81,10 @@ async function geocodeLocation(query: string): Promise<{ lat: number; lon: numbe
   };
 }
 
-function formatLocalDayBounds(date: Date): { min: string; max: string } {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
+function formatLocalDayBounds(date: LocalDateParts): { min: string; max: string } {
+  const year = `${date.year}`;
+  const month = `${date.month}`.padStart(2, "0");
+  const day = `${date.day}`.padStart(2, "0");
   const base = `${year}-${month}-${day}`;
   return {
     min: `${base}T00:00:00`,
@@ -59,15 +92,36 @@ function formatLocalDayBounds(date: Date): { min: string; max: string } {
   };
 }
 
-function parseDate(input?: string): Date {
+function parseDate(input?: string): LocalDateParts {
   if (!input) {
-    return new Date();
+    const now = new Date();
+    return {
+      year: now.getFullYear(),
+      month: now.getMonth() + 1,
+      day: now.getDate(),
+    };
   }
-  const date = new Date(input);
-  if (Number.isNaN(date.getTime())) {
+
+  const match = input.match(/^(\d{4})-(\d{2})-(\d{2})$/u);
+  if (!match) {
     throw new Error(`Invalid date '${input}'. Use YYYY-MM-DD.`);
   }
-  return date;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+
+  const utcDate = new Date(Date.UTC(year, month - 1, day));
+  const isValidDate =
+    utcDate.getUTCFullYear() === year &&
+    utcDate.getUTCMonth() + 1 === month &&
+    utcDate.getUTCDate() === day;
+
+  if (!isValidDate) {
+    throw new Error(`Invalid date '${input}'. Use YYYY-MM-DD.`);
+  }
+
+  return { year, month, day };
 }
 
 export class AvailabilityService {
@@ -116,9 +170,8 @@ export class AvailabilityService {
         : filteredTenants;
 
     const dayBounds = formatLocalDayBounds(parseDate(input.date));
-    const results: TenantAvailability[] = [];
 
-    for (const tenant of scopedTenants) {
+    return mapWithConcurrency(scopedTenants, AVAILABILITY_CONCURRENCY, async (tenant) => {
       const resources = await this.api.getAvailability(
         {
           tenantIds: [tenant.tenantId],
@@ -130,9 +183,7 @@ export class AvailabilityService {
         session,
       );
 
-      results.push({ tenant, resources });
-    }
-
-    return results;
+      return { tenant, resources };
+    });
   }
 }
