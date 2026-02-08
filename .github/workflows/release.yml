@@ -147,6 +147,36 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+
+      - name: Build release notes
+        env:
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          NOTES_FILE="release-notes.md"
+          PREV_TAG="$(git describe --tags --abbrev=0 "${RELEASE_TAG}^" 2>/dev/null || true)"
+
+          {
+            echo "## Commits"
+            echo
+            if [ -n "$PREV_TAG" ]; then
+              echo "Since \\`$PREV_TAG\\`:"
+              echo
+              RANGE="${PREV_TAG}..${RELEASE_TAG}"
+            else
+              RANGE="${RELEASE_TAG}"
+            fi
+
+            COMMIT_LINES="$(git log --pretty=format:'- %s ([`%h`](https://github.com/'"$GH_REPO"'/commit/%H))' ${RANGE})"
+            if [ -n "$COMMIT_LINES" ]; then
+              printf "%s\n" "$COMMIT_LINES"
+            else
+              echo "- Initial release"
+            fi
+          } > "$NOTES_FILE"
+
+          echo "RELEASE_NOTES_FILE=$NOTES_FILE" >> "$GITHUB_ENV"
 
       - name: Download packaged artifacts
         uses: actions/download-artifact@v4
@@ -168,9 +198,10 @@ jobs:
         shell: bash
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --notes-file "$RELEASE_NOTES_FILE"
             gh release upload "$RELEASE_TAG" release-assets/* --clobber
           else
             gh release create "$RELEASE_TAG" release-assets/* \
               --title "$RELEASE_TAG" \
-              --notes "Automated release for $RELEASE_TAG\n\nmacOS artifacts are ad-hoc signed unless PADEL_CODESIGN_IDENTITY is configured."
+              --notes-file "$RELEASE_NOTES_FILE"
           fi
