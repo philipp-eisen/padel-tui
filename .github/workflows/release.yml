@@ -29,27 +29,27 @@ jobs:
           - id: linux-x64
             runner: ubuntu-latest
             build_script: build:exe:linux-x64
-            dist_file: padel-tui-linux-x64
+            dist_file: padel-tui
             archive_ext: tar.gz
           - id: linux-arm64
             runner: ubuntu-24.04-arm
             build_script: build:exe:linux-arm64
-            dist_file: padel-tui-linux-arm64
+            dist_file: padel-tui
             archive_ext: tar.gz
           - id: windows-x64
             runner: windows-latest
             build_script: build:exe:windows-x64
-            dist_file: padel-tui-windows-x64.exe
+            dist_file: padel-tui.exe
             archive_ext: zip
           - id: darwin-arm64
             runner: macos-14
             build_script: build:exe:darwin-arm64
-            dist_file: padel-tui-darwin-arm64
+            dist_file: padel-tui
             archive_ext: tar.gz
           - id: darwin-x64
             runner: macos-13
             build_script: build:exe:darwin-x64
-            dist_file: padel-tui-darwin-x64
+            dist_file: padel-tui
             archive_ext: tar.gz
 
     steps:

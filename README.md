@@ -18,6 +18,28 @@ bun run start
 bun run tui
 ```
 
+## Use Prebuilt Binaries
+
+Download the archive for your platform from GitHub Releases, extract it, then run:
+
+```bash
+# macOS / Linux
+tar -xzf padel-tui-<version>-<platform>.tar.gz
+chmod +x padel-tui
+./padel-tui
+
+# CLI examples with binary
+./padel-tui auth login --email you@example.com
+./padel-tui search --near berlin --date 2026-02-11
+```
+
+Windows (PowerShell):
+
+```powershell
+Expand-Archive .\padel-tui-<version>-windows-x64.zip -DestinationPath .
+.\padel-tui.exe tui
+```
+
 ## TUI Quick Guide
 
 - Login: `Tab` switches email/password, `Enter` submits.
@@ -38,7 +60,7 @@ bun run tui
   - `Enter` applies choice, `Esc` cancels.
 - Global: `Ctrl+L` logs out.
 
-## CLI
+## CLI (from source)
 
 ```bash
 # login (password prompt is hidden if --password is omitted)
