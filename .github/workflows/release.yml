@@ -44,6 +44,11 @@ jobs:
             build_script: build:exe:darwin-arm64
             dist_file: padel-tui
             archive_ext: tar.gz
+          - id: darwin-x64
+            runner: macos-13
+            build_script: build:exe:darwin-x64
+            dist_file: padel-tui
+            archive_ext: tar.gz
 
     steps:
       - name: Resolve release tag
@@ -226,3 +231,82 @@ jobs:
               --title "$RELEASE_TAG" \
               --notes-file "$RELEASE_NOTES_FILE"
           fi
+
+  update-homebrew:
+    name: Update Homebrew formula
+    runs-on: ubuntu-latest
+    needs: publish
+
+    steps:
+      - name: Resolve release tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "RELEASE_TAG=${{ inputs.tag }}" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_TAG=${{ github.ref_name }}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Download checksum artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: checksums
+          path: checksums
+
+      - name: Update Homebrew tap
+        env:
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+
+          SHA_DARWIN_ARM64=$(grep "darwin-arm64" checksums/SHA256SUMS | awk '{print $1}')
+          SHA_DARWIN_X64=$(grep "darwin-x64" checksums/SHA256SUMS | awk '{print $1}')
+          SHA_LINUX_ARM64=$(grep "linux-arm64" checksums/SHA256SUMS | awk '{print $1}')
+          SHA_LINUX_X64=$(grep "linux-x64" checksums/SHA256SUMS | awk '{print $1}')
+
+          git clone "https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/philipp-eisen/homebrew-tap.git" tap
+          cd tap
+
+          cat > Formula/padel-tui.rb << FORMULA
+          class PadelTui < Formula
+            desc "Terminal UI for finding and booking padel courts"
+            homepage "https://github.com/philipp-eisen/padel-tui"
+            version "${VERSION}"
+            license "MIT"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/philipp-eisen/padel-tui/releases/download/v#{version}/padel-tui-v#{version}-darwin-arm64.tar.gz"
+                sha256 "${SHA_DARWIN_ARM64}"
+              else
+                url "https://github.com/philipp-eisen/padel-tui/releases/download/v#{version}/padel-tui-v#{version}-darwin-x64.tar.gz"
+                sha256 "${SHA_DARWIN_X64}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/philipp-eisen/padel-tui/releases/download/v#{version}/padel-tui-v#{version}-linux-arm64.tar.gz"
+                sha256 "${SHA_LINUX_ARM64}"
+              else
+                url "https://github.com/philipp-eisen/padel-tui/releases/download/v#{version}/padel-tui-v#{version}-linux-x64.tar.gz"
+                sha256 "${SHA_LINUX_X64}"
+              end
+            end
+
+            def install
+              bin.install "padel-tui"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/padel-tui --version")
+            end
+          end
+          FORMULA
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/padel-tui.rb
+          git commit -m "padel-tui ${VERSION}"
+          git push

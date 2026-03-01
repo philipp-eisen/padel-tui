@@ -1,5 +1,6 @@
 import { cac } from "cac";
 import type { AppContext } from "../app/context";
+import { VERSION } from "../version";
 import { registerAuthCommands, printAuthUsage } from "./commands/auth-command";
 import {
   registerAvailabilityCommands,
@@ -44,6 +45,7 @@ export async function runCli(app: AppContext, argv: string[]): Promise<void> {
   const normalizedArgv = argv[0] === "help" ? ["--help"] : argv;
   const cli = cac("padel-tui");
 
+  cli.version(VERSION);
   cli.help();
   registerAuthCommands(cli, app);
   registerAvailabilityCommands(cli, app);
