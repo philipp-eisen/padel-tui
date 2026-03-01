@@ -2,6 +2,8 @@
 
 Terminal app (TUI + CLI) for Playtomic.
 
+![padel-tui screenshot](assets/screenshot.png)
+
 ## Current features
 
 - Search availabilities
