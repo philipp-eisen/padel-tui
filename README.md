@@ -11,33 +11,42 @@ Terminal app (TUI + CLI) for Playtomic.
 
 ## Install
 
-```bash
-bun install
-```
-
-## Run
+### Homebrew (macOS / Linux)
 
 ```bash
-# default: opens TUI
-bun run start
-
-# CLI examples
-bun run src/main.ts auth login --email you@example.com
-bun run src/main.ts search --near berlin --date 2026-02-11
-bun run src/main.ts search --name "Berlin venue" --date 2026-02-11
-bun run src/main.ts matches --size 30
-bun run src/main.ts match-cancel --match-id <match-id>
-bun run src/main.ts book --tenant-id <tenant-id> --resource-id <resource-id> --start 2026-02-16T21:00:00 --duration 60 --players 4
+brew install philipp-eisen/tap/padel-tui
 ```
 
-## Prebuilt binaries
+### Prebuilt binaries
 
-Download release assets (currently Linux + macOS arm64), extract, then run:
+Download from [releases](https://github.com/philipp-eisen/padel-tui/releases), extract, and run:
 
 ```bash
 tar -xzf padel-tui-<version>-<platform>.tar.gz
 chmod +x padel-tui
 ./padel-tui
+```
+
+### From source
+
+```bash
+bun install
+bun run start
+```
+
+## Usage
+
+```bash
+# default: opens TUI
+padel-tui
+
+# CLI examples
+padel-tui auth login --email you@example.com
+padel-tui search --near berlin --date 2026-02-11
+padel-tui search --name "Berlin venue" --date 2026-02-11
+padel-tui matches --size 30
+padel-tui match-cancel --match-id <match-id>
+padel-tui book --tenant-id <tenant-id> --resource-id <resource-id> --start 2026-02-16T21:00:00 --duration 60 --players 4
 ```
 
 ## TUI keys (quick)
