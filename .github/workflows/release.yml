@@ -45,7 +45,7 @@ jobs:
             dist_file: padel-tui
             archive_ext: tar.gz
           - id: darwin-x64
-            runner: macos-13
+            runner: macos-15-intel
             build_script: build:exe:darwin-x64
             dist_file: padel-tui
             archive_ext: tar.gz
